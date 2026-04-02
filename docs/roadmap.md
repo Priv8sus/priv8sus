@@ -23,7 +23,8 @@ Build a profitable sports betting prediction product. Every feature ladders back
 - [x] **First Users** — CMO launches GTM (BETA-34), target 100 users in 30 days
 - [x] **Prediction Accuracy Visible** — MAE/calibration displayed on dashboard
 - [x] **Daily Data Pipeline** — Automated NBA data refresh
-- [ ] **MVP Complete** — Waiting on BETA-40 (fallback NBA API) to ship
+- [x] **Fallback NBA API** — BETA-40 complete, balldontlie API integrated
+- [ ] **MVP Deployment** — BETA-73 blocked on Railway token
 
 ### MVP Scope (revised from BETA-11)
 | Feature | Status | Revenue Impact |
@@ -37,11 +38,18 @@ Build a profitable sports betting prediction product. Every feature ladders back
 | Paper trading (BETA-30) | Done | — |
 | MVP hardening (BETA-41) | Done | — |
 | Community engagement (BETA-42) | Done | — |
-| Fallback NBA API (BETA-40) | IN PROGRESS | **Critical blocker** |
+| Fallback NBA API (BETA-40) | Done | — |
+| Auth infrastructure (BETA-66) | Done | — |
+| Best Bet highlight (BETA-99) | Done | — |
+| Guided tour (BETA-97) | Done | — |
+| Welcome screen (BETA-96) | Done | — |
+| Analytics infrastructure (BETA-119) | Done | — |
+| MVP Deployment (BETA-73) | Blocked | **Critical blocker** |
 
 ### What We Cut for MVP
 - News/injury scraping — deferred post-MVP
 - Steals/blocks/3PT predictions — MVP uses basic 3 stats first
+- Real sportsbook odds — paper trading uses simulated odds
 
 ### Success Metrics
 - Dashboard loads with < 3s response time
