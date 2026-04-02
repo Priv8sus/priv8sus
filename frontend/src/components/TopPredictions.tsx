@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { PlayerPrediction } from '../types/predictions';
-import { capturePaperTrade } from '../analytics';
+import { capturePaperTrade, captureFirstPredictionViewed } from '../analytics';
 import { useAuth } from '../context/AuthContext';
 import './TopPredictions.css';
 
@@ -55,6 +55,7 @@ async function placePaperTrade(player: PlayerPrediction, statType: string, line:
 export function TopPredictions({ players, onPlayerClick }: TopPredictionsProps) {
   const { user } = useAuth();
   const [tradingStates, setTradingStates] = useState<Record<number, 'idle' | 'loading' | 'success' | 'error'>>({});
+  const [hasTrackedFirstView, setHasTrackedFirstView] = useState(false);
 
   if (players.length === 0) {
     return (
@@ -62,6 +63,14 @@ export function TopPredictions({ players, onPlayerClick }: TopPredictionsProps) 
         <p>No predictions available</p>
       </div>
     );
+  }
+
+  function handlePlayerClick(player: PlayerPrediction) {
+    if (!hasTrackedFirstView && user) {
+      captureFirstPredictionViewed(user.id, player.playerId, player.playerName, player.confidence);
+      setHasTrackedFirstView(true);
+    }
+    onPlayerClick(player);
   }
 
   function handlePaperTrade(e: React.MouseEvent, player: PlayerPrediction) {
@@ -107,7 +116,7 @@ export function TopPredictions({ players, onPlayerClick }: TopPredictionsProps) 
             <div
               key={player.playerId}
               className={`prediction-card ${isBestBet ? 'best-bet' : ''}`}
-              onClick={() => onPlayerClick(player)}
+              onClick={() => handlePlayerClick(player)}
             >
               {isBestBet && (
                 <div className="best-bet-badge">TOP PICK FOR YOU</div>

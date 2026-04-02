@@ -83,4 +83,25 @@ export function captureTourComplete(userId: number) {
   });
 }
 
+export function captureWelcomeContinue(userId: number) {
+  posthog.capture('welcome_continue', {
+    user_id: userId,
+  });
+}
+
+export function captureWelcomeSkip(userId: number) {
+  posthog.capture('welcome_skip', {
+    user_id: userId,
+  });
+}
+
+export function captureFirstPredictionViewed(userId: number, playerId: number, playerName: string, confidence: number) {
+  posthog.capture('first_prediction_viewed', {
+    user_id: userId,
+    player_id: playerId,
+    player_name: playerName,
+    confidence,
+  });
+}
+
 export { posthog };

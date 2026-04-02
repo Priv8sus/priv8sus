@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { captureTourComplete } from '../analytics';
 import './TourGuide.css';
 
 interface TourStep {
@@ -34,6 +36,7 @@ interface TourGuideProps {
 }
 
 export function TourGuide({ onComplete }: TourGuideProps) {
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [visible, setVisible] = useState(true);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
@@ -63,6 +66,9 @@ export function TourGuide({ onComplete }: TourGuideProps) {
   const handleComplete = () => {
     setVisible(false);
     localStorage.setItem('tour_completed', 'true');
+    if (user) {
+      captureTourComplete(user.id);
+    }
     onComplete();
   };
 

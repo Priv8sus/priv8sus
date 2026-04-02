@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { captureWelcomeContinue, captureWelcomeSkip } from '../analytics';
 import './WelcomeScreen.css';
 
 interface WelcomeScreenProps {
@@ -7,15 +9,22 @@ interface WelcomeScreenProps {
 }
 
 export function WelcomeScreen({ onContinue, onSkip }: WelcomeScreenProps) {
+  const { user } = useAuth();
   const [isVisible, setIsVisible] = useState(true);
 
   const handleContinue = () => {
     setIsVisible(false);
+    if (user) {
+      captureWelcomeContinue(user.id);
+    }
     onContinue();
   };
 
   const handleSkip = () => {
     setIsVisible(false);
+    if (user) {
+      captureWelcomeSkip(user.id);
+    }
     onSkip();
   };
 
