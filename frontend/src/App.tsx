@@ -6,6 +6,7 @@ import { PlayerDetailPanel } from './components/PlayerDetailPanel';
 import { TopPredictions } from './components/TopPredictions';
 import { LandingPage } from './components/LandingPage';
 import { UserProfile } from './components/UserProfile';
+import { TourGuide, useTourComplete } from './components/TourGuide';
 import type { PredictionsResponse, PlayerPrediction } from './types/predictions';
 import './App.css';
 
@@ -22,6 +23,8 @@ function Dashboard({ showProfile }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<'today' | 'history'>('today');
   const [selectedPlayer, setSelectedPlayer] = useState<PlayerPrediction | null>(null);
   const [selectedGame, setSelectedGame] = useState<number | null>(null);
+  const { completed: tourCompleted, markComplete: markTourComplete } = useTourComplete();
+  const [showTour, setShowTour] = useState(false);
 
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
@@ -51,6 +54,12 @@ function Dashboard({ showProfile }: DashboardProps) {
     setActiveTab('today');
   };
 
+  useEffect(() => {
+    if (!tourCompleted && user) {
+      setShowTour(true);
+    }
+  }, [user, tourCompleted]);
+
   if (loading) {
     return <div className="dashboard loading">Loading dashboard...</div>;
   }
@@ -64,6 +73,11 @@ function Dashboard({ showProfile }: DashboardProps) {
       <header className="dash-header">
         <div className="header-left">
           <div className="logo">🏀 Priv8sus</div>
+          {!tourCompleted && (
+            <button className="tour-help-btn" onClick={() => setShowTour(true)}>
+              ? Help
+            </button>
+          )}
         </div>
         <div className="header-center">
           <div className="date-selector">
@@ -174,10 +188,17 @@ function Dashboard({ showProfile }: DashboardProps) {
         </main>
       )}
 
-      <PlayerDetailPanel 
-        player={selectedPlayer} 
-        onClose={() => setSelectedPlayer(null)} 
+      <PlayerDetailPanel
+        player={selectedPlayer}
+        onClose={() => setSelectedPlayer(null)}
       />
+
+      {showTour && (
+        <TourGuide onComplete={() => {
+          setShowTour(false);
+          markTourComplete();
+        }} />
+      )}
     </div>
   );
 }

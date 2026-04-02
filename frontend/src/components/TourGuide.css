@@ -1,0 +1,115 @@
+.tour-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.tour-highlight {
+  position: absolute;
+  border: 3px solid #fbbf24;
+  border-radius: 8px;
+  box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.3);
+  pointer-events: none;
+  animation: pulse-highlight 2s ease-in-out infinite;
+}
+
+@keyframes pulse-highlight {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.3); }
+  50% { box-shadow: 0 0 0 8px rgba(251, 191, 36, 0.1); }
+}
+
+.tour-tooltip {
+  position: absolute;
+  background: #1a1a2e;
+  border: 1px solid #fbbf24;
+  border-radius: 12px;
+  padding: 16px;
+  max-width: 280px;
+  pointer-events: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  z-index: 1001;
+}
+
+.tour-tooltip-top {
+  transform: translateY(-100%);
+}
+
+.tour-step-indicator {
+  font-size: 11px;
+  color: #8b8b9e;
+  margin-bottom: 8px;
+}
+
+.tour-tooltip h3 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  color: #fbbf24;
+}
+
+.tour-tooltip p {
+  margin: 0 0 16px 0;
+  font-size: 13px;
+  color: #e5e5e5;
+  line-height: 1.5;
+}
+
+.tour-buttons {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tour-skip {
+  background: transparent;
+  border: 1px solid #6b7280;
+  color: #9ca3af;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tour-skip:hover {
+  border-color: #9ca3af;
+  color: #e5e5e5;
+}
+
+.tour-next {
+  background: #fbbf24;
+  border: none;
+  color: #1a1a2e;
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tour-next:hover {
+  background: #f59e0b;
+}
+
+.tour-help-btn {
+  background: #3b3b5c;
+  border: 1px solid #6b7280;
+  color: #e5e5e5;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.tour-help-btn:hover {
+  background: #4b4b6c;
+  border-color: #8b8b9e;
+}
