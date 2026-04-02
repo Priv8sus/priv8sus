@@ -25,6 +25,7 @@ import {
   getBetStats,
   resetPaperTrading,
   probabilityToAmerican,
+  TYPICAL_PROP_ODDS,
 } from "./paper-trading.js";
 import { trackEvent, getDailyActiveUsers, getSignupsSince, getPaperTradesCount, getRetentionStats, getStreakInfo, recordActivity, getFavoriteTeams, addFavoriteTeam, removeFavoriteTeam } from "./analytics.js";
 import { sendWelcomeEmail, queueEmail, processEmailQueue, recordEmailOpen, unsubscribeUser, sendDailyDigestToAllUsers } from "./email-service.js";
@@ -1359,7 +1360,7 @@ app.post("/api/paper-trading/simulate", async (req, res) => {
           if (bet.edge < minEdge) continue;
 
           const probability = bet.recommendation === 'over' ? bet.overProb : bet.underProb;
-          const kelly = calculateKelly(probability, bet.lineValue);
+          const kelly = calculateKelly(probability, TYPICAL_PROP_ODDS);
           if (kelly.stake < 1) continue;
 
           const placed = placeBet(
@@ -1370,7 +1371,7 @@ app.post("/api/paper-trading/simulate", async (req, res) => {
             bet.statType,
             bet.lineValue,
             bet.recommendation,
-            probabilityToAmerican(probability),
+            TYPICAL_PROP_ODDS,
             kelly.stake,
             bet.edge,
             probability

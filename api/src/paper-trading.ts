@@ -45,6 +45,7 @@ export interface KellyBet {
 
 const DEFAULT_START_BALANCE = 10000;
 const KELLY_DIVISOR = 2;
+export const TYPICAL_PROP_ODDS = -110;
 
 export function initBankroll(startBalance: number = DEFAULT_START_BALANCE): Bankroll {
   const db = getDb();
@@ -159,7 +160,7 @@ export function settleBet(betId: number, actualValue: number): PaperBet | null {
     ? actualValue > bet.line 
     : actualValue < bet.line;
 
-  const profitLoss = won ? bet.potential_payout - bet.stake : -bet.stake;
+  const profitLoss = won ? bet.potential_payout : -bet.stake;
 
   db.prepare(`
     UPDATE paper_bets SET 
