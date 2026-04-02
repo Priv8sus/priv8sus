@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import type { User, SubscriptionInfo } from '../types/auth';
+import { setUserId, clearUserId, captureSignup, captureLogin } from '../analytics';
 
 interface AuthContextType {
   user: User | null;
@@ -12,6 +13,8 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
   refreshSubscription: () => Promise<void>;
   startCheckout: (priceId: string) => Promise<{ success: boolean; checkoutUrl?: string; error?: string }>;
+  completeOnboarding: () => Promise<void>;
+  completeTour: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -41,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setUser(null);
     setSubscription(null);
+    clearUserId();
   };
 
   const refreshUser = async () => {
@@ -53,6 +57,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await fetchWithAuth('/api/auth/me');
       if (data.success) {
         setUser(data.user);
+        if (data.user) {
+          setUserId(data.user.id, {
+            email: data.user.email,
+            subscription_tier: data.user.subscriptionTier,
+          });
+        }
       } else {
         logout();
       }
@@ -99,6 +109,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(TOKEN_KEY, data.token);
         setToken(data.token);
         setUser(data.user);
+        if (data.user) {
+          setUserId(data.user.id, {
+            email: data.user.email,
+            subscription_tier: data.user.subscriptionTier,
+          });
+          captureLogin(data.user.id);
+        }
         return { success: true };
       }
       return { success: false, error: data.error || 'Login failed' };
@@ -119,6 +136,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(TOKEN_KEY, data.token);
         setToken(data.token);
         setUser(data.user);
+        if (data.user) {
+          setUserId(data.user.id, {
+            email: data.user.email,
+            subscription_tier: data.user.subscriptionTier,
+          });
+          captureSignup(data.user.id, email);
+        }
         return { success: true };
       }
       return { success: false, error: data.error || 'Signup failed' };
@@ -143,6 +167,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const completeOnboarding = async () => {
+    try {
+      await fetchWithAuth('/api/auth/onboarding-complete', { method: 'POST' });
+      setUser(prev => prev ? { ...prev, onboardingCompleted: true } : null);
+    } catch {
+      // Silently fail
+    }
+  };
+
+  const completeTour = async () => {
+    try {
+      await fetchWithAuth('/api/auth/tour-complete', { method: 'POST' });
+      setUser(prev => prev ? { ...prev, tourCompleted: true } : null);
+    } catch {
+      // Silently fail
+    }
+  };
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -155,6 +197,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshUser,
       refreshSubscription,
       startCheckout,
+      completeOnboarding,
+      completeTour,
     }}>
       {children}
     </AuthContext.Provider>

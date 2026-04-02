@@ -8,6 +8,7 @@ import { LandingPage } from './components/LandingPage';
 import { UserProfile } from './components/UserProfile';
 import { TourGuide, useTourComplete } from './components/TourGuide';
 import { WelcomeScreen, useWelcomeComplete } from './components/WelcomeScreen';
+import { capturePageView } from './analytics';
 import type { PredictionsResponse, PlayerPrediction } from './types/predictions';
 import './App.css';
 
@@ -16,7 +17,7 @@ interface DashboardProps {
 }
 
 function Dashboard({ showProfile }: DashboardProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, completeTour } = useAuth();
   const [data, setData] = useState<PredictionsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +27,17 @@ function Dashboard({ showProfile }: DashboardProps) {
   const [selectedGame, setSelectedGame] = useState<number | null>(null);
   const { completed: tourCompleted, markComplete: markTourComplete } = useTourComplete();
   const [showTour, setShowTour] = useState(false);
+
+  const isTourCompleted = tourCompleted || user?.tourCompleted;
+
+  const handleTourComplete = async () => {
+    await completeTour();
+    markTourComplete();
+  };
+
+  useEffect(() => {
+    capturePageView(activeTab === 'today' ? 'dashboard_today' : 'dashboard_history');
+  }, [activeTab]);
 
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
@@ -56,10 +68,10 @@ function Dashboard({ showProfile }: DashboardProps) {
   };
 
   useEffect(() => {
-    if (!tourCompleted && user) {
+    if (!isTourCompleted && user) {
       setShowTour(true);
     }
-  }, [user, tourCompleted]);
+  }, [user, isTourCompleted]);
 
   if (loading) {
     return <div className="dashboard loading">Loading dashboard...</div>;
@@ -74,7 +86,7 @@ function Dashboard({ showProfile }: DashboardProps) {
       <header className="dash-header">
         <div className="header-left">
           <div className="logo">🏀 Priv8sus</div>
-          {!tourCompleted && (
+          {!isTourCompleted && (
             <button className="tour-help-btn" onClick={() => setShowTour(true)}>
               ? Help
             </button>
@@ -197,7 +209,7 @@ function Dashboard({ showProfile }: DashboardProps) {
       {showTour && (
         <TourGuide onComplete={() => {
           setShowTour(false);
-          markTourComplete();
+          handleTourComplete();
         }} />
       )}
     </div>
@@ -213,7 +225,7 @@ function App() {
 }
 
 function AppInner() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, completeOnboarding } = useAuth();
   const [showDashboard, setShowDashboard] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const { completed: welcomeCompleted, markComplete: markWelcomeComplete } = useWelcomeComplete();
@@ -221,8 +233,16 @@ function AppInner() {
   useEffect(() => {
     if (user) {
       setShowDashboard(true);
+      capturePageView('dashboard');
+    } else {
+      capturePageView('landing');
     }
   }, [user]);
+
+  const handleWelcomeComplete = async () => {
+    await completeOnboarding();
+    markWelcomeComplete();
+  };
 
   if (isLoading) {
     return <div className="dashboard loading">Loading...</div>;
@@ -237,10 +257,10 @@ function AppInner() {
         >
           ← Back to Home
         </button>
-        {!welcomeCompleted && (
+        {!welcomeCompleted && !user?.onboardingCompleted && (
           <WelcomeScreen
-            onContinue={() => markWelcomeComplete()}
-            onSkip={() => markWelcomeComplete()}
+            onContinue={handleWelcomeComplete}
+            onSkip={handleWelcomeComplete}
           />
         )}
         <Dashboard showProfile={() => setShowProfile(true)} />

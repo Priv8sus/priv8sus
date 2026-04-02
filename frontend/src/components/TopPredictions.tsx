@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import type { PlayerPrediction } from '../types/predictions';
+import { capturePaperTrade } from '../analytics';
+import { useAuth } from '../context/AuthContext';
 import './TopPredictions.css';
 
 interface TopPredictionsProps {
@@ -51,6 +53,7 @@ async function placePaperTrade(player: PlayerPrediction, statType: string, line:
 }
 
 export function TopPredictions({ players, onPlayerClick }: TopPredictionsProps) {
+  const { user } = useAuth();
   const [tradingStates, setTradingStates] = useState<Record<number, 'idle' | 'loading' | 'success' | 'error'>>({});
 
   if (players.length === 0) {
@@ -75,9 +78,13 @@ export function TopPredictions({ players, onPlayerClick }: TopPredictionsProps) 
       return;
     }
 
-    placePaperTrade(player, bestBet.stat, bestBet.line, bestBet.overPayout !== undefined ? 'over' : 'under', bestBet.overPayout ? 110 : -110)
-      .then(() => {
+    const odds = bestBet.overPayout !== undefined ? 110 : -110;
+    placePaperTrade(player, bestBet.stat, bestBet.line, bestBet.overPayout !== undefined ? 'over' : 'under', odds)
+      .then((result) => {
         setTradingStates(prev => ({ ...prev, [player.playerId]: 'success' }));
+        if (user) {
+          capturePaperTrade(user.id, player.playerId, player.playerName, 10, odds, result.potentialPayout || 0);
+        }
         setTimeout(() => setTradingStates(prev => ({ ...prev, [player.playerId]: 'idle' })), 2000);
       })
       .catch(() => {
