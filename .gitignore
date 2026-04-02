@@ -1,0 +1,40 @@
+# Environment files (contain secrets)
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+*.pyc
+__pycache__/
+.venv/
+
+# Build outputs
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+
+# Docker volumes (database data)
+postgres_data/
+redis_data/
+
+# Secrets (never commit)
+*.pem
+*.key
+credentials.json

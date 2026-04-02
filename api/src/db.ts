@@ -1,0 +1,235 @@
+import Database from "better-sqlite3";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+let db: Database.Database;
+
+export function getDb(): Database.Database {
+  if (!db) {
+    const dbPath = process.env.DB_PATH || path.join(__dirname, "..", "data", "predictions.db");
+    const dir = path.dirname(dbPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    db = new Database(dbPath);
+    db.pragma("journal_mode = WAL");
+    initSchema(db);
+  }
+  return db;
+}
+
+function initSchema(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS players (
+      id INTEGER PRIMARY KEY,
+      first_name TEXT NOT NULL,
+      last_name TEXT NOT NULL,
+      team_id INTEGER,
+      team_abbreviation TEXT,
+      position TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS season_stats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      player_id INTEGER NOT NULL,
+      season INTEGER NOT NULL,
+      games_played INTEGER DEFAULT 0,
+      min_avg REAL DEFAULT 0,
+      pts_avg REAL DEFAULT 0,
+      reb_avg REAL DEFAULT 0,
+      ast_avg REAL DEFAULT 0,
+      stl_avg REAL DEFAULT 0,
+      blk_avg REAL DEFAULT 0,
+      fg_pct REAL DEFAULT 0,
+      fg3_pct REAL DEFAULT 0,
+      ft_pct REAL DEFAULT 0,
+      turnover_avg REAL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (player_id) REFERENCES players(id),
+      UNIQUE(player_id, season)
+    );
+
+    CREATE TABLE IF NOT EXISTS predictions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      player_id INTEGER NOT NULL,
+      game_date TEXT NOT NULL,
+      predicted_pts REAL NOT NULL,
+      predicted_reb REAL NOT NULL,
+      predicted_ast REAL NOT NULL,
+      predicted_stl REAL NOT NULL,
+      predicted_blk REAL NOT NULL,
+      predicted_threes REAL NOT NULL,
+      confidence REAL NOT NULL,
+      actual_pts REAL,
+      actual_reb REAL,
+      actual_ast REAL,
+      actual_stl REAL,
+      actual_blk REAL,
+      actual_threes REAL,
+      accuracy_score REAL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (player_id) REFERENCES players(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS betting_lines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      player_id INTEGER NOT NULL,
+      game_date TEXT NOT NULL,
+      stat_type TEXT NOT NULL,
+      line_value REAL NOT NULL,
+      over_prob REAL,
+      under_prob REAL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (player_id) REFERENCES players(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS games (
+      id INTEGER PRIMARY KEY,
+      date TEXT NOT NULL,
+      home_team_id INTEGER,
+      home_team_name TEXT,
+      home_team_score INTEGER,
+      visitor_team_id INTEGER,
+      visitor_team_name TEXT,
+      visitor_team_score INTEGER,
+      season INTEGER,
+      status TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS player_conditions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      player_id INTEGER NOT NULL,
+      game_date TEXT NOT NULL,
+      injury_status TEXT,
+      injury_detail TEXT,
+      is_back_to_back INTEGER DEFAULT 0,
+      rest_days INTEGER DEFAULT 0,
+      recent_news_summary TEXT,
+      condition_score REAL DEFAULT 0,
+      data_sources TEXT,
+      scraped_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (player_id) REFERENCES players(id),
+      UNIQUE(player_id, game_date)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_predictions_game_date ON predictions(game_date);
+    CREATE INDEX IF NOT EXISTS idx_predictions_player_id ON predictions(player_id);
+    CREATE INDEX IF NOT EXISTS idx_season_stats_player_id ON season_stats(player_id);
+    CREATE INDEX IF NOT EXISTS idx_games_date ON games(date);
+    CREATE INDEX IF NOT EXISTS idx_betting_lines_player_date ON betting_lines(player_id, game_date);
+    CREATE INDEX IF NOT EXISTS idx_player_conditions_date ON player_conditions(game_date);
+    CREATE INDEX IF NOT EXISTS idx_player_conditions_player ON player_conditions(player_id);
+
+    CREATE TABLE IF NOT EXISTS bankroll (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      start_balance REAL NOT NULL,
+      current_balance REAL NOT NULL,
+      total_wagered REAL DEFAULT 0,
+      total_profit_loss REAL DEFAULT 0,
+      win_rate REAL DEFAULT 0,
+      roi REAL DEFAULT 0,
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS paper_bets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      player_id INTEGER NOT NULL,
+      player_name TEXT NOT NULL,
+      team_abbrev TEXT,
+      game_date TEXT NOT NULL,
+      stat_type TEXT NOT NULL,
+      line REAL NOT NULL,
+      over_or_under TEXT NOT NULL,
+      odds INTEGER NOT NULL,
+      stake REAL NOT NULL,
+      edge REAL NOT NULL,
+      probability REAL NOT NULL,
+      potential_payout REAL NOT NULL,
+      status TEXT DEFAULT 'open',
+      actual_value REAL,
+      profit_loss REAL,
+      settled_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS scoring_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      game_date TEXT NOT NULL,
+      stat_type TEXT NOT NULL,
+      total_predictions INTEGER DEFAULT 0,
+      mae REAL DEFAULT 0,
+      rmse REAL DEFAULT 0,
+      calibration_score REAL DEFAULT 0,
+      avg_confidence REAL DEFAULT 0,
+      computed_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(game_date, stat_type)
+    );
+
+    CREATE TABLE IF NOT EXISTS weekly_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      week_start TEXT NOT NULL,
+      week_end TEXT NOT NULL,
+      total_predictions INTEGER DEFAULT 0,
+      overall_mae REAL DEFAULT 0,
+      overall_rmse REAL DEFAULT 0,
+      overall_calibration REAL DEFAULT 0,
+      best_stat_type TEXT,
+      worst_stat_type TEXT,
+      report_json TEXT,
+      generated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(week_start, week_end)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_scoring_date ON scoring_results(game_date);
+    CREATE INDEX IF NOT EXISTS idx_weekly_reports_week ON weekly_reports(week_start);
+
+    CREATE TABLE IF NOT EXISTS subscribers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL UNIQUE,
+      subscribed_at TEXT DEFAULT (datetime('now')),
+      status TEXT DEFAULT 'active',
+      source TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      subscription_tier TEXT DEFAULT 'free',
+      stripe_customer_id TEXT,
+      stripe_subscription_id TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+    CREATE INDEX IF NOT EXISTS idx_users_stripe_customer ON users(stripe_customer_id);
+  `);
+}
+
+export function migrateUsersTable(db: Database.Database): void {
+  const cols = db.prepare("PRAGMA table_info(users)").all() as any[];
+  const hasTier = cols.some(c => c.name === 'subscription_tier');
+  if (!hasTier) {
+    db.exec(`
+      ALTER TABLE users ADD COLUMN subscription_tier TEXT DEFAULT 'free';
+      ALTER TABLE users ADD COLUMN stripe_customer_id TEXT;
+      ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT;
+    `);
+  }
+}
+
+// Export for direct use
+export function initDatabase(dbPath?: string): Database.Database {
+  const resolvedPath = dbPath || process.env.DB_PATH || path.join(process.cwd(), "data", "predictions.db");
+  const dir = path.dirname(resolvedPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  db = new Database(resolvedPath);
+  db.pragma("journal_mode = WAL");
+  initSchema(db);
+  return db;
+}
