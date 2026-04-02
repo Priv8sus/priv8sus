@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 628">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1625"/>
+      <stop offset="100%" style="stop-color:#0d0d12"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#aa3bff"/>
+      <stop offset="100%" style="stop-color:#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="628" fill="url(#bgGrad)"/>
+  <rect x="0" y="0" width="6" height="628" fill="url(#accentGrad)"/>
+  <text x="60" y="150" font-family="system-ui, sans-serif" font-size="80" font-weight="700" fill="#ffffff" letter-spacing="-2">Priv8sus</text>
+  <text x="60" y="220" font-family="system-ui, sans-serif" font-size="32" fill="#c084fc">Privacy-First NBA Predictions</text>
+  <text x="60" y="300" font-family="system-ui, sans-serif" font-size="28" fill="#9ca3af">Predict. Profit. Keep your secrets.</text>
+  <text x="60" y="400" font-family="system-ui, sans-serif" font-size="24" fill="#6b6375">priv8sus.com</text>
+  <circle cx="1050" cy="314" r="150" fill="url(#accentGrad)" opacity="0.15"/>
+  <circle cx="1050" cy="314" r="100" fill="url(#accentGrad)" opacity="0.2"/>
+  <circle cx="1050" cy="314" r="50" fill="url(#accentGrad)"/>
+  <path d="M1015 314 L1035 334 L1085 274" stroke="#ffffff" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

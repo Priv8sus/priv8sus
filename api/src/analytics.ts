@@ -10,6 +10,12 @@ export interface AnalyticsEvent {
   created_at?: string;
 }
 
+/**
+ * Track an analytics event for a user.
+ * @param eventType - Type of event to track
+ * @param userId - Optional user ID associated with the event
+ * @param metadata - Optional additional event metadata
+ */
 export function trackEvent(eventType: EventType, userId?: number, metadata?: Record<string, any>): void {
   const db = getDb();
   const metadataJson = metadata ? JSON.stringify(metadata) : null;
@@ -19,6 +25,11 @@ export function trackEvent(eventType: EventType, userId?: number, metadata?: Rec
   `).run(eventType, userId ?? null, metadataJson);
 }
 
+/**
+ * Get count of unique active users on a specific date.
+ * @param date - Date in YYYY-MM-DD format
+ * @returns Number of unique users who performed an activity
+ */
 export function getDailyActiveUsers(date: string): number {
   const db = getDb();
   const result = db.prepare(`
@@ -30,6 +41,11 @@ export function getDailyActiveUsers(date: string): number {
   return result?.count ?? 0;
 }
 
+/**
+ * Get count of user signups since a given date.
+ * @param since - Date in YYYY-MM-DD format
+ * @returns Number of signups since the date
+ */
 export function getSignupsSince(since: string): number {
   const db = getDb();
   const result = db.prepare(`
@@ -41,6 +57,11 @@ export function getSignupsSince(since: string): number {
   return result?.count ?? 0;
 }
 
+/**
+ * Get count of paper trades placed since a given date.
+ * @param since - Optional date filter in YYYY-MM-DD format
+ * @returns Number of paper trades
+ */
 export function getPaperTradesCount(since?: string): number {
   const db = getDb();
   let query = `SELECT COUNT(*) as count FROM events WHERE event_type = 'paper_trade_placed'`;
@@ -53,6 +74,11 @@ export function getPaperTradesCount(since?: string): number {
   return result?.count ?? 0;
 }
 
+/**
+ * Calculate user retention rate for a given day cohort.
+ * @param day - Cohort period (1, 7, or 30 days)
+ * @returns Retention statistics including retained count, total, and rate
+ */
 export function getRetentionStats(day: 1 | 7 | 30): { retained: number; total: number; rate: number } {
   const db = getDb();
   const since = day === 1 ? 1 : day === 7 ? 7 : 30;
@@ -77,4 +103,137 @@ export function getRetentionStats(day: 1 | 7 | 30): { retained: number; total: n
   const retained = result?.retained ?? 0;
   const total = result?.total ?? 0;
   return { retained, total, rate: total > 0 ? retained / total : 0 };
+}
+
+export interface StreakInfo {
+  currentStreak: number;
+  longestStreak: number;
+  lastActivityDate: string | null;
+  hasViewedToday: boolean;
+  badges: string[];
+}
+
+/**
+ * Get streak information for a user including current streak, longest streak, and badges.
+ * @param userId - User ID to get streak info for
+ * @returns StreakInfo object with current/longest streak, last activity, and badges
+ */
+export function getStreakInfo(userId: number): StreakInfo {
+  const db = getDb();
+  const today = new Date().toISOString().split('T')[0];
+  
+  const streakRow = db.prepare(`
+    SELECT current_streak, longest_streak, last_activity_date
+    FROM user_streaks WHERE user_id = ?
+  `).get(userId) as { current_streak: number; longest_streak: number; last_activity_date: string } | undefined;
+
+  if (!streakRow) {
+    return {
+      currentStreak: 0,
+      longestStreak: 0,
+      lastActivityDate: null,
+      hasViewedToday: false,
+      badges: []
+    };
+  }
+
+  const hasViewedToday = streakRow.last_activity_date === today;
+  const badges = getStreakBadges(streakRow.current_streak);
+
+  return {
+    currentStreak: streakRow.current_streak,
+    longestStreak: streakRow.longest_streak,
+    lastActivityDate: streakRow.last_activity_date,
+    hasViewedToday,
+    badges
+  };
+}
+
+function getStreakBadges(streak: number): string[] {
+  const badges: string[] = [];
+  if (streak >= 7) badges.push('7-day');
+  if (streak >= 30) badges.push('30-day');
+  if (streak >= 100) badges.push('100-day');
+  return badges;
+}
+
+/**
+ * Record a user activity and update their streak if applicable.
+ * @param userId - User ID
+ * @param activityType - Type of activity (default: 'prediction_view')
+ */
+export function recordActivity(userId: number, activityType: string = 'prediction_view'): void {
+  const db = getDb();
+  const today = new Date().toISOString().split('T')[0];
+  
+  db.prepare(`
+    INSERT OR IGNORE INTO user_activity (user_id, activity_date, activity_type)
+    VALUES (?, ?, ?)
+  `).run(userId, today, activityType);
+
+  const existingStreak = db.prepare(`SELECT * FROM user_streaks WHERE user_id = ?`).get(userId) as any;
+  
+  if (!existingStreak) {
+    db.prepare(`
+      INSERT INTO user_streaks (user_id, current_streak, longest_streak, last_activity_date, streak_started_at)
+      VALUES (?, 1, 1, ?, ?)
+    `).run(userId, today, today);
+    return;
+  }
+
+  const lastDate = existingStreak.last_activity_date;
+  if (lastDate === today) {
+    return;
+  }
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+  if (lastDate === yesterdayStr) {
+    const newStreak = existingStreak.current_streak + 1;
+    const newLongest = Math.max(newStreak, existingStreak.longest_streak);
+    db.prepare(`
+      UPDATE user_streaks 
+      SET current_streak = ?, longest_streak = ?, last_activity_date = ?, updated_at = datetime('now')
+      WHERE user_id = ?
+    `).run(newStreak, newLongest, today, userId);
+  } else {
+    db.prepare(`
+      UPDATE user_streaks 
+      SET current_streak = 1, last_activity_date = ?, streak_started_at = ?, updated_at = datetime('now')
+      WHERE user_id = ?
+    `).run(today, today, userId);
+  }
+}
+
+/**
+ * Get list of user's favorite teams.
+ * @param userId - User ID
+ * @returns Array of team abbreviations
+ */
+export function getFavoriteTeams(userId: number): string[] {
+  const db = getDb();
+  const rows = db.prepare(`SELECT team_abbreviation FROM favorite_teams WHERE user_id = ?`).all(userId) as { team_abbreviation: string }[];
+  return rows.map(r => r.team_abbreviation);
+}
+
+/**
+ * Add a team to user's favorites.
+ * @param userId - User ID
+ * @param teamAbbrev - Team abbreviation to add
+ */
+export function addFavoriteTeam(userId: number, teamAbbrev: string): void {
+  const db = getDb();
+  db.prepare(`INSERT OR IGNORE INTO favorite_teams (user_id, team_abbreviation) VALUES (?, ?)`).run(userId, teamAbbrev);
+}
+
+/**
+ * Remove a team from user's favorites.
+ * @param userId - User ID
+ * @param teamAbbrev - Team abbreviation to remove
+ */
+export function removeFavoriteTeam(userId: number, teamAbbrev: string): void {
+  const db = getDb();
+  db.prepare(`DELETE FROM favorite_teams WHERE user_id = ? AND team_abbreviation = ?`).run(userId, teamAbbrev);
 }

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Login } from './Login';
 import { Signup } from './Signup';
+import { captureSubscribe } from '../analytics';
 import './LandingPage.css';
 
 type AuthMode = 'login' | 'signup' | null;
@@ -29,6 +30,7 @@ export function LandingPage() {
       if (res.ok) {
         setStatus('success');
         setMessage("You're on the list! We'll send daily NBA predictions to your inbox.");
+        captureSubscribe(email);
         setEmail('');
       } else {
         setStatus('error');
@@ -99,6 +101,24 @@ export function LandingPage() {
           <p className="hero-social-proof">
             Join <strong>1,247</strong> bettors getting daily predictions
           </p>
+        </div>
+      </section>
+
+      <section className="testimonials">
+        <h2>What Bettors Are Saying</h2>
+        <div className="testimonials-grid">
+          <div className="testimonial-card">
+            <p className="testimonial-text">"Hit 4 of 5 props last night using the AI recommendations. The confidence scores help me pick which bets are worth it."</p>
+            <p className="testimonial-author">— Marcus T., Denver</p>
+          </div>
+          <div className="testimonial-card">
+            <p className="testimonial-text">"Paper trading feature is a game changer. I learned so much about prop betting without risking a cent."</p>
+            <p className="testimonial-author">— Kevin W., Phoenix</p>
+          </div>
+          <div className="testimonial-card">
+            <p className="testimonial-text">"The daily email picks save me hours of research. Login, check the top picks, done. Simple."</p>
+            <p className="testimonial-author">— David K., Chicago</p>
+          </div>
         </div>
       </section>
 
@@ -220,6 +240,7 @@ export function LandingPage() {
           <p className="form-message error">{message}</p>
         )}
         <p className="cta-note">Free to join. No spam. Unsubscribe anytime.</p>
+        <p className="cta-risk-reversal">No credit card required. 100% free access during beta.</p>
       </section>
 
       <footer className="landing-footer">

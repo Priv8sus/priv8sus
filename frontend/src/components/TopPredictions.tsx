@@ -2,29 +2,12 @@ import { useState } from 'react';
 import type { PlayerPrediction } from '../types/predictions';
 import { capturePaperTrade, captureFirstPredictionViewed } from '../analytics';
 import { useAuth } from '../context/AuthContext';
+import { getTrendIcon, getTrendClass } from '../utils/format';
 import './TopPredictions.css';
 
 interface TopPredictionsProps {
   players: PlayerPrediction[];
   onPlayerClick: (player: PlayerPrediction) => void;
-}
-
-function getTrendIcon(predicted: number, avg: number | undefined): string {
-  if (avg === undefined) return '→';
-  const diff = predicted - avg;
-  const threshold = avg * 0.05;
-  if (diff > threshold) return '↑';
-  if (diff < -threshold) return '↓';
-  return '→';
-}
-
-function getTrendClass(predicted: number, avg: number | undefined): string {
-  if (avg === undefined) return 'trend-neutral';
-  const diff = predicted - avg;
-  const threshold = avg * 0.05;
-  if (diff > threshold) return 'trend-up';
-  if (diff < -threshold) return 'trend-down';
-  return 'trend-neutral';
 }
 
 async function placePaperTrade(player: PlayerPrediction, statType: string, line: number, overOrUnder: 'over' | 'under', odds: number) {

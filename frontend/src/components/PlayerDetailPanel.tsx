@@ -1,25 +1,10 @@
 import type { PlayerPrediction } from '../types/predictions';
+import { getTrendIcon, getDiffPercent } from '../utils/format';
 import './PlayerDetailPanel.css';
 
 interface PlayerDetailPanelProps {
   player: PlayerPrediction | null;
   onClose: () => void;
-}
-
-function getDiffPercent(predicted: number, avg: number | undefined): string {
-  if (avg === undefined || avg === 0) return '—';
-  const diff = ((predicted - avg) / avg) * 100;
-  const sign = diff >= 0 ? '+' : '';
-  return `${sign}${diff.toFixed(1)}%`;
-}
-
-function getTrendIcon(predicted: number, avg: number | undefined): string {
-  if (avg === undefined || avg === 0) return '→';
-  const diff = predicted - avg;
-  const threshold = avg * 0.03;
-  if (diff > threshold) return '↑';
-  if (diff < -threshold) return '↓';
-  return '→';
 }
 
 export function PlayerDetailPanel({ player, onClose }: PlayerDetailPanelProps) {
@@ -59,7 +44,7 @@ export function PlayerDetailPanel({ player, onClose }: PlayerDetailPanelProps) {
             <span className="col-diff">
               {avg && (
                 <>
-                  {getTrendIcon(player.predictedPts, avg.pts)}
+                  {getTrendIcon(player.predictedPts, avg.pts, 0.03)}
                   {getDiffPercent(player.predictedPts, avg?.pts)}
                 </>
               )}
@@ -73,7 +58,7 @@ export function PlayerDetailPanel({ player, onClose }: PlayerDetailPanelProps) {
             <span className="col-diff">
               {avg && (
                 <>
-                  {getTrendIcon(player.predictedReb, avg.reb)}
+                  {getTrendIcon(player.predictedReb, avg.reb, 0.03)}
                   {getDiffPercent(player.predictedReb, avg?.reb)}
                 </>
               )}
@@ -87,7 +72,7 @@ export function PlayerDetailPanel({ player, onClose }: PlayerDetailPanelProps) {
             <span className="col-diff">
               {avg && (
                 <>
-                  {getTrendIcon(player.predictedAst, avg.ast)}
+                  {getTrendIcon(player.predictedAst, avg.ast, 0.03)}
                   {getDiffPercent(player.predictedAst, avg?.ast)}
                 </>
               )}

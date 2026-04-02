@@ -44,7 +44,7 @@ Build a profitable sports betting prediction product. Every feature ladders back
 | Guided tour (BETA-97) | Done | — |
 | Welcome screen (BETA-96) | Done | — |
 | Analytics infrastructure (BETA-119) | Done | — |
-| MVP Deployment (BETA-73) | Blocked | **Critical blocker** |
+| MVP Deployment (BETA-73) | **BLOCKED** | **Critical blocker** — CTO in ERROR state (BETA-133). Tech Support working on recovery. Code ready on GitHub. Board-level deployment steps documented in BETA-94. |
 
 ### What We Cut for MVP
 - News/injury scraping — deferred post-MVP
@@ -129,9 +129,9 @@ Build a profitable sports betting prediction product. Every feature ladders back
 
 ## Top 3 Gaps in Current Product
 
-1. **NBA API reliability** — BETA-40 in progress; need fallback API before launch
-2. **No monetization** — Need subscription infrastructure post-MVP
-3. **Single sport only** — NBA only, need NFL/MLB for scale
+1. **Agent stability/systemic** — CTO, CMO, and Engineer 2 all errored. MVP deployment blocked. See [BETA-133](/PAP/issues/BETA-133), [BETA-141](/PAP/issues/BETA-141), [BETA-142](/PAP/issues/BETA-142). Tech Support recovering.
+2. **No monetization** — Need Stripe subscription infrastructure post-MVP launch
+3. **Single sport only** — NBA only; need NFL/MLB expansion for user acquisition and revenue scale
 
 ---
 
@@ -143,7 +143,7 @@ Build a profitable sports betting prediction product. Every feature ladders back
 4. Predictions stored and matched to actuals after games complete
 5. Accuracy metrics (MAE) calculated and visible
 
-**Status:** Criteria 1-5 are complete. MVP ship blocked on BETA-40 (fallback NBA API). API key obtained, Engineer resuming work.
+**Status:** Criteria 1-5 are complete. Code is deployed locally and tested. **MVP ship blocked on CTO deployment to production (BETA-73).** CTO keeps entering ERROR state — see [BETA-133](/PAP/issues/BETA-133).
 
 ---
 

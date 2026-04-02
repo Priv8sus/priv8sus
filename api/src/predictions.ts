@@ -52,6 +52,13 @@ function estimateThrees(fg3Pct: number, fg3mAvg: number): number {
   return roundStat(0.3);
 }
 
+/**
+ * Generate stat predictions for a player based on season averages.
+ * @param player - Player data from NBA API
+ * @param seasonAvg - Season average statistics
+ * @param includeDistributions - Whether to include probability distributions
+ * @returns StatPrediction with predicted stats and optional distributions/betting lines
+ */
 export function predictPlayerStats(
   player: BDLPlayer,
   seasonAvg: BDLSeasonAverage | null,
@@ -137,6 +144,12 @@ export function predictPlayerStats(
   return prediction;
 }
 
+/**
+ * Rank players by their predicted impact using weighted stat scoring.
+ * Weights: pts=1.0, reb=1.2, ast=1.5, stl=2.0, blk=2.0, threes=1.5
+ * @param predictions - Array of player predictions
+ * @returns Sorted array with highest impact players first
+ */
 export function rankPlayersByImpact(predictions: StatPrediction[]): StatPrediction[] {
   return [...predictions].sort((a, b) => {
     const scoreA =
@@ -157,6 +170,15 @@ export function rankPlayersByImpact(predictions: StatPrediction[]): StatPredicti
   });
 }
 
+/**
+ * Generate predictions for multiple players and return ranked results.
+ * Filters by confidence > 0.15 and returns top 20 players.
+ * @param players - Array of players to predict
+ * @param seasonAverages - Map of player ID to season averages
+ * @param gameDate - Date of the game
+ * @param includeDistributions - Whether to include probability distributions
+ * @returns PredictionResult with all predictions and top 20 players
+ */
 export function generatePredictions(
   players: BDLPlayer[],
   seasonAverages: Map<number, BDLSeasonAverage>,

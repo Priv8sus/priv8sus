@@ -85,12 +85,22 @@ async function fetchBDL<T>(endpoint: string, params: Record<string, string | num
   return res.json() as Promise<BDLResponse<T>>;
 }
 
+/**
+ * Fetch all players from balldontlie API with pagination.
+ * @param cursor - Optional pagination cursor
+ * @returns Paginated response with player data
+ */
 export async function getAllPlayers(cursor?: number): Promise<BDLResponse<BDLPlayer>> {
   const params: Record<string, string | number> = { per_page: 100 };
   if (cursor) params.cursor = cursor;
   return fetchBDL<BDLPlayer>("/players", params);
 }
 
+/**
+ * Fetch a single player by ID.
+ * @param playerId - Player ID
+ * @returns Player data
+ */
 export async function getPlayer(playerId: number): Promise<BDLPlayer> {
   const url = `${BASE_URL}/players/${playerId}`;
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -103,6 +113,12 @@ export async function getPlayer(playerId: number): Promise<BDLPlayer> {
   return json.data;
 }
 
+/**
+ * Fetch season averages for a player. Falls back to previous season if current unavailable.
+ * @param playerId - Player ID
+ * @param season - Optional season year (defaults to current year)
+ * @returns Season averages or null if not found
+ */
 export async function getSeasonAverages(
   playerId: number,
   season?: number
@@ -128,15 +144,30 @@ export async function getSeasonAverages(
   }
 }
 
+/**
+ * Fetch NBA games for a specific date.
+ * @param date - Date in YYYY-MM-DD format (defaults to today)
+ * @returns Games response with metadata
+ */
 export async function getGames(date?: string): Promise<BDLResponse<BDLGame>> {
   const targetDate = date || new Date().toISOString().split("T")[0];
   return fetchBDL<BDLGame>("/games", { "dates[]": targetDate });
 }
 
+/**
+ * Fetch all players for a specific team.
+ * @param teamId - Team ID
+ * @returns Paginated response with team players
+ */
 export async function getTeamPlayers(teamId: number): Promise<BDLResponse<BDLPlayer>> {
   return fetchBDL<BDLPlayer>("/players", { per_page: 100, "team_ids[]": teamId });
 }
 
+/**
+ * Fetch rosters for multiple teams.
+ * @param teamIds - Array of team IDs
+ * @returns Combined array of players from all teams
+ */
 export async function getTeamRoster(teamIds: number[]): Promise<BDLPlayer[]> {
   const allPlayers: BDLPlayer[] = [];
   for (const teamId of teamIds) {
@@ -150,6 +181,12 @@ export async function getTeamRoster(teamIds: number[]): Promise<BDLPlayer[]> {
   return allPlayers;
 }
 
+/**
+ * Search for players by name query.
+ * @param query - Search string (player name)
+ * @param limit - Maximum results to return (default 20)
+ * @returns Array of matching players
+ */
 export async function searchBDLPlayers(query: string, limit: number = 20): Promise<BDLPlayer[]> {
   const url = new URL(`${BASE_URL}/players`);
   url.searchParams.set("search", query);

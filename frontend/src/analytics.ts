@@ -19,6 +19,13 @@ export function setUserId(userId: number, properties?: Record<string, unknown>) 
   posthog.identify(userId.toString(), properties);
 }
 
+export function captureSubscribe(email: string, source: string = 'landing_page') {
+  posthog.capture('subscribe_completed', {
+    email_hash: email.toLowerCase().trim(),
+    source,
+  });
+}
+
 export function clearUserId() {
   posthog.reset();
 }

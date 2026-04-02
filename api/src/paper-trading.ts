@@ -47,6 +47,11 @@ const DEFAULT_START_BALANCE = 10000;
 const KELLY_DIVISOR = 2;
 export const TYPICAL_PROP_ODDS = -110;
 
+/**
+ * Initialize paper trading bankroll. Returns existing if already initialized.
+ * @param startBalance - Starting balance (default 10000)
+ * @returns Bankroll object
+ */
 export function initBankroll(startBalance: number = DEFAULT_START_BALANCE): Bankroll {
   const db = getDb();
   
@@ -74,12 +79,24 @@ export function initBankroll(startBalance: number = DEFAULT_START_BALANCE): Bank
   };
 }
 
+/**
+ * Get current bankroll state.
+ * @returns Bankroll object or null if not initialized
+ */
 export function getBankroll(): Bankroll | null {
   const db = getDb();
   const bankroll = db.prepare('SELECT * FROM bankroll ORDER BY id DESC LIMIT 1').get() as Bankroll | undefined;
   return bankroll || null;
 }
 
+/**
+ * Calculate Kelly Criterion stake for a bet.
+ * Uses fractional Kelly (default 1/2) to reduce volatility.
+ * @param probability - Win probability (0-1)
+ * @param odds - American odds (e.g., -110, +150)
+ * @param divisor - Kelly divisor to reduce risk (default 2)
+ * @returns KellyBet object with stake and edge calculations
+ */
 export function calculateKelly(probability: number, odds: number, divisor: number = KELLY_DIVISOR): KellyBet {
   const decimalOdds = odds > 0 ? (odds / 100) + 1 : 1 - (100 / odds);
   const edge = probability - (1 / decimalOdds);
@@ -98,6 +115,21 @@ export function calculateKelly(probability: number, odds: number, divisor: numbe
   };
 }
 
+/**
+ * Place a paper trade bet.
+ * @param playerId - Player ID
+ * @param playerName - Player name
+ * @param teamAbbrev - Team abbreviation
+ * @param gameDate - Game date
+ * @param statType - Stat type (pts, reb, ast)
+ * @param line - Betting line value
+ * @param overOrUnder - Over or under bet
+ * @param odds - American odds
+ * @param stake - Amount wagered
+ * @param edge - Calculated edge
+ * @param probability - Estimated probability
+ * @returns PaperBet object
+ */
 export function placeBet(
   playerId: number,
   playerName: string,
@@ -147,6 +179,12 @@ export function placeBet(
   return bet;
 }
 
+/**
+ * Settle an open bet with actual stat result.
+ * @param betId - Bet ID to settle
+ * @param actualValue - Actual stat value from game
+ * @returns Updated PaperBet or null if not found/already settled
+ */
 export function settleBet(betId: number, actualValue: number): PaperBet | null {
   const db = getDb();
   
@@ -185,16 +223,29 @@ export function settleBet(betId: number, actualValue: number): PaperBet | null {
   return settledBet;
 }
 
+/**
+ * Get all open (unsettled) bets.
+ * @returns Array of open PaperBets
+ */
 export function getOpenBets(): PaperBet[] {
   const db = getDb();
   return db.prepare('SELECT * FROM paper_bets WHERE status = \'open\' ORDER BY created_at DESC').all() as PaperBet[];
 }
 
+/**
+ * Get settled bet history.
+ * @param limit - Maximum number of bets to return (default 50)
+ * @returns Array of settled PaperBets
+ */
 export function getBetHistory(limit: number = 50): PaperBet[] {
   const db = getDb();
   return db.prepare('SELECT * FROM paper_bets WHERE status != \'open\' ORDER BY settled_at DESC LIMIT ?').all(limit) as PaperBet[];
 }
 
+/**
+ * Get aggregate betting statistics.
+ * @returns Object with total/won/lost/pending bets, win rate, P&L, and ROI
+ */
 export function getBetStats(): {
   total_bets: number;
   won_bets: number;
@@ -235,6 +286,9 @@ export function getBetStats(): {
   };
 }
 
+/**
+ * Reset paper trading - delete all bets and restore bankroll to starting balance.
+ */
 export function resetPaperTrading(): void {
   const db = getDb();
   
@@ -257,6 +311,11 @@ export function resetPaperTrading(): void {
   logger.info('Paper trading reset');
 }
 
+/**
+ * Convert American odds to decimal odds.
+ * @param americanOdds - American odds (e.g., -110, +150)
+ * @returns Decimal odds
+ */
 export function americanToDecimal(americanOdds: number): number {
   if (americanOdds > 0) {
     return (americanOdds / 100) + 1;
@@ -264,6 +323,11 @@ export function americanToDecimal(americanOdds: number): number {
   return 1 - (100 / americanOdds);
 }
 
+/**
+ * Convert decimal odds to American odds.
+ * @param decimalOdds - Decimal odds (e.g., 1.91, 2.50)
+ * @returns American odds
+ */
 export function decimalToAmerican(decimalOdds: number): number {
   if (decimalOdds >= 2) {
     return (decimalOdds - 1) * 100;
@@ -271,6 +335,11 @@ export function decimalToAmerican(decimalOdds: number): number {
   return -100 / (decimalOdds - 1);
 }
 
+/**
+ * Convert probability to American odds.
+ * @param probability - Probability (0-1)
+ * @returns American odds
+ */
 export function probabilityToAmerican(probability: number): number {
   if (probability >= 0.5) {
     return -100 / probability + 100;
@@ -278,6 +347,11 @@ export function probabilityToAmerican(probability: number): number {
   return 100 / (1 - probability);
 }
 
+/**
+ * Convert American odds to probability.
+ * @param americanOdds - American odds (e.g., -110, +150)
+ * @returns Probability (0-1)
+ */
 export function americanToProbability(americanOdds: number): number {
   if (americanOdds > 0) {
     return 100 / (americanOdds + 100);

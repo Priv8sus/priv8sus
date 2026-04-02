@@ -3,6 +3,10 @@ export interface User {
   email: string;
   subscriptionTier: 'free' | 'premium';
   createdAt: string;
+  onboardingCompleted?: boolean;
+  firstLoginAt?: string;
+  isFirstLogin?: boolean;
+  tourCompleted?: boolean;
 }
 
 export interface AuthResponse {

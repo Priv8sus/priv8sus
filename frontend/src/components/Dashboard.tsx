@@ -1,19 +1,64 @@
 import { useState, useEffect } from 'react';
 import { TopPredictions } from './TopPredictions';
 import { PlayerDetailPanel } from './PlayerDetailPanel';
+import { useAuth } from '../context/AuthContext';
 import type { PredictionsResponse, PlayerPrediction, Game } from '../types/predictions';
 import './Dashboard.css';
 
+interface StreakInfo {
+  currentStreak: number;
+  longestStreak: number;
+  lastActivityDate: string | null;
+  hasViewedToday: boolean;
+  badges: string[];
+}
+
 export function Dashboard() {
+  const { token } = useAuth();
   const [data, setData] = useState<PredictionsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<PlayerPrediction | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [streak, setStreak] = useState<StreakInfo | null>(null);
 
   useEffect(() => {
     fetchPredictions(selectedDate);
-  }, [selectedDate]);
+    if (token) {
+      fetchStreak();
+    }
+  }, [selectedDate, token]);
+
+  async function fetchStreak() {
+    try {
+      const response = await fetch('/api/streaks', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const result = await response.json();
+      if (result.success) {
+        setStreak(result.streak);
+      }
+    } catch {
+      // Silently fail
+    }
+  }
+
+  async function recordActivity() {
+    if (!token) return;
+    try {
+      await fetch('/api/streaks/record', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ activityType: 'prediction_view' })
+      });
+      fetchStreak();
+    } catch {
+      // Silently fail
+    }
+  }
 
   async function fetchPredictions(date: string) {
     setLoading(true);
@@ -25,6 +70,7 @@ export function Dashboard() {
       }
       const result: PredictionsResponse = await response.json();
       setData(result);
+      recordActivity();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch predictions');
     } finally {
@@ -52,6 +98,18 @@ export function Dashboard() {
       <header className="dashboard-header">
         <div className="header-content">
           <div className="logo">🏀 NBA Prediction Dashboard</div>
+          {streak && (
+            <div className="streak-display">
+              <span className="streak-counter">🔥 {streak.currentStreak} day streak</span>
+              {streak.badges.length > 0 && (
+                <div className="streak-badges">
+                  {streak.badges.map((badge) => (
+                    <span key={badge} className={`badge badge-${badge}`}>{badge}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <div className="date-selector">
             <button onClick={() => handleDateChange(-1)}>←</button>
             <span>{formatDate(selectedDate)}</span>

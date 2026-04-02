@@ -212,3 +212,50 @@
 .trend-neutral {
   color: #6b7280;
 }
+
+@media (max-width: 768px) {
+  .top-predictions {
+    padding: 16px;
+  }
+
+  .prediction-card {
+    padding: 12px;
+  }
+
+  .player-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .player-name {
+    font-size: 14px;
+    word-break: break-word;
+  }
+
+  .confidence-badge {
+    font-size: 12px;
+    padding: 3px 6px;
+    min-width: 40px;
+  }
+
+  .stats-grid {
+    gap: 4px;
+  }
+
+  .stat-row {
+    font-size: 12px;
+    gap: 4px;
+  }
+
+  .stat-label {
+    min-width: 28px;
+  }
+
+  .stat-value {
+    min-width: 32px;
+  }
+
+  .stat-avg {
+    display: none;
+  }
+}

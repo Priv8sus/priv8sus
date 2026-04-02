@@ -7,6 +7,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let db: Database.Database;
 
+/**
+ * Get the singleton database instance.
+ * Initializes the database on first call.
+ * @returns SQLite database instance
+ */
 export function getDb(): Database.Database {
   if (!db) {
     const dbPath = process.env.DB_PATH || path.join(__dirname, "..", "data", "predictions.db");
@@ -221,6 +226,70 @@ function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
     CREATE INDEX IF NOT EXISTS idx_events_user ON events(user_id);
     CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at);
+
+    CREATE TABLE IF NOT EXISTS user_streaks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL UNIQUE,
+      current_streak INTEGER DEFAULT 0,
+      longest_streak INTEGER DEFAULT 0,
+      last_activity_date TEXT,
+      streak_started_at TEXT,
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS user_activity (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      activity_date TEXT NOT NULL,
+      activity_type TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      UNIQUE(user_id, activity_date, activity_type)
+    );
+
+    CREATE TABLE IF NOT EXISTS favorite_teams (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      team_abbreviation TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      UNIQUE(user_id, team_abbreviation)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_user_streaks_user ON user_streaks(user_id);
+    CREATE INDEX IF NOT EXISTS idx_user_activity_user ON user_activity(user_id);
+    CREATE INDEX IF NOT EXISTS idx_user_activity_date ON user_activity(activity_date);
+    CREATE INDEX IF NOT EXISTS idx_favorite_teams_user ON favorite_teams(user_id);
+
+    CREATE TABLE IF NOT EXISTS email_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      email_type TEXT NOT NULL,
+      scheduled_for TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      sent_at TEXT,
+      resend_message_id TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_email_jobs_status ON email_jobs(status);
+    CREATE INDEX IF NOT EXISTS idx_email_jobs_scheduled ON email_jobs(scheduled_for);
+    CREATE INDEX IF NOT EXISTS idx_email_jobs_user ON email_jobs(user_id);
+
+    CREATE TABLE IF NOT EXISTS email_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      email_type TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      message_id TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_email_events_user ON email_events(user_id);
+    CREATE INDEX IF NOT EXISTS idx_email_events_type ON email_events(email_type);
   `);
 }
 
@@ -233,6 +302,26 @@ export function migrateUsersTable(db: Database.Database): void {
       ALTER TABLE users ADD COLUMN stripe_customer_id TEXT;
       ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT;
     `);
+  }
+
+  const hasUnsubscribed = cols.some(c => c.name === 'email_unsubscribed');
+  if (!hasUnsubscribed) {
+    db.exec(`ALTER TABLE users ADD COLUMN email_unsubscribed INTEGER DEFAULT 0`);
+  }
+
+  const hasOnboardingCompleted = cols.some(c => c.name === 'onboarding_completed');
+  if (!hasOnboardingCompleted) {
+    db.exec(`ALTER TABLE users ADD COLUMN onboarding_completed INTEGER DEFAULT 0`);
+  }
+
+  const hasFirstLoginAt = cols.some(c => c.name === 'first_login_at');
+  if (!hasFirstLoginAt) {
+    db.exec(`ALTER TABLE users ADD COLUMN first_login_at TEXT`);
+  }
+
+  const hasTourCompleted = cols.some(c => c.name === 'tour_completed');
+  if (!hasTourCompleted) {
+    db.exec(`ALTER TABLE users ADD COLUMN tour_completed INTEGER DEFAULT 0`);
   }
 }
 

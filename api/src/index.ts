@@ -97,16 +97,32 @@ setInterval(() => {
 let predictionCache: { data: any; timestamp: number } | null = null;
 const CACHE_TTL = 10 * 60 * 1000;
 
+/**
+ * @route GET /api/health
+ * @description Health check endpoint
+ * @returns {Object} Status and timestamp
+ */
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+/**
+ * @route GET /api/monitoring/errors
+ * @description Get recent error logs
+ * @query {number} [limit=100] - Maximum number of errors to return
+ * @returns {Object} Object containing errors array and count
+ */
 app.get("/api/monitoring/errors", (req, res) => {
   const limit = parseInt(req.query.limit as string) || 100;
   const errors = getRecentErrors(limit);
   res.json({ errors, count: errors.length });
 });
 
+/**
+ * @route GET /api/monitoring/error-stats
+ * @description Get error statistics for monitoring system health
+ * @returns {Object} Error stats including last24h count and healthy status
+ */
 app.get("/api/monitoring/error-stats", (req, res) => {
   const stats = getErrorStats();
   res.json({
@@ -116,12 +132,23 @@ app.get("/api/monitoring/error-stats", (req, res) => {
   });
 });
 
+/**
+ * @route POST /api/monitoring/errors/clear
+ * @description Clear all error logs (admin only)
+ * @returns {Object} Success message
+ */
 app.post("/api/monitoring/errors/clear", (req, res) => {
   clearErrors();
   logger.info('Error logs cleared by admin');
   res.json({ success: true, message: 'Error logs cleared' });
 });
 
+/**
+ * @route GET /api/email/track/:trackingId
+ * @description Track email open via tracking pixel
+ * @param {string} trackingId - Unique tracking identifier for the email
+ * @returns {Buffer} 1x1 transparent GIF pixel
+ */
 app.get("/api/email/track/:trackingId", async (req, res) => {
   await recordEmailOpen(req.params.trackingId);
   res.setHeader('Content-Type', 'image/gif');
@@ -129,6 +156,12 @@ app.get("/api/email/track/:trackingId", async (req, res) => {
   res.send(Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'));
 });
 
+/**
+ * @route POST /api/email/unsubscribe
+ * @description Unsubscribe user from emails (POST variant)
+ * @body {number} userId - User ID to unsubscribe
+ * @returns {Object} Success message or error
+ */
 app.post("/api/email/unsubscribe", async (req, res) => {
   try {
     const { userId } = req.body;
@@ -147,6 +180,12 @@ app.post("/api/email/unsubscribe", async (req, res) => {
   }
 });
 
+/**
+ * @route GET /api/email/unsubscribe
+ * @description Unsubscribe user from emails via query parameter (redirect variant)
+ * @query {string} uid - User ID to unsubscribe
+ * @returns {Redirect} Redirects to frontend with unsubscribe status
+ */
 app.get("/api/email/unsubscribe", async (req, res) => {
   const userId = req.query.uid as string;
   if (!userId) {
@@ -161,6 +200,13 @@ function isValidEmail(email: string): boolean {
   return emailRegex.test(email);
 }
 
+/**
+ * @route POST /api/subscribe
+ * @description Subscribe email to newsletter
+ * @body {string} email - Email address to subscribe
+ * @body {string} [source] - Subscription source (e.g., 'website')
+ * @returns {Object} Success message with subscriberId or error
+ */
 app.post("/api/subscribe", (req, res) => {
   try {
     const { email, source } = req.body;
@@ -201,6 +247,14 @@ import jwt from 'jsonwebtoken';
 const JWT_SECRET = config.JWT_SECRET;
 const SALT_ROUNDS = 10;
 
+/**
+ * @route POST /api/auth/signup
+ * @description Register a new user account
+ * @body {string} email - User email address
+ * @body {string} password - User password (min 8 characters)
+ * @returns {Object} Success message, JWT token, and user object
+ * @rateLimit 10 requests per 15 minutes
+ */
 app.post("/api/auth/signup", authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -257,6 +311,14 @@ app.post("/api/auth/signup", authLimiter, async (req, res) => {
   }
 });
 
+/**
+ * @route POST /api/auth/login
+ * @description Authenticate user and return JWT token
+ * @body {string} email - User email
+ * @body {string} password - User password
+ * @returns {Object} Success message, JWT token, and user object
+ * @rateLimit 10 requests per 15 minutes
+ */
 app.post("/api/auth/login", authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -327,6 +389,12 @@ const authenticateToken = (req: AuthRequest, res: express.Response, next: expres
   }
 };
 
+/**
+ * @route GET /api/auth/me
+ * @description Get current authenticated user profile
+ * @requiresAuth JWT token in Authorization header
+ * @returns {Object} User profile data
+ */
 app.get("/api/auth/me", authenticateToken, async (req: AuthRequest, res) => {
   try {
     const user = db.prepare(
@@ -356,6 +424,14 @@ app.get("/api/auth/me", authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
+/**
+ * @route PUT /api/auth/profile
+ * @description Update user profile (email or password)
+ * @requiresAuth JWT token in Authorization header
+ * @body {string} [email] - New email address
+ * @body {string} [password] - New password (min 8 characters)
+ * @returns {Object} Success message and updated user data
+ */
 app.put("/api/auth/profile", authenticateToken, async (req: AuthRequest, res) => {
   try {
     const { email, password } = req.body;
@@ -401,6 +477,12 @@ app.put("/api/auth/profile", authenticateToken, async (req: AuthRequest, res) =>
   }
 });
 
+/**
+ * @route POST /api/auth/onboarding-complete
+ * @description Mark user onboarding as completed
+ * @requiresAuth JWT token in Authorization header
+ * @returns {Object} Success message
+ */
 app.post("/api/auth/onboarding-complete", authenticateToken, async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.userId;
@@ -412,6 +494,12 @@ app.post("/api/auth/onboarding-complete", authenticateToken, async (req: AuthReq
   }
 });
 
+/**
+ * @route POST /api/auth/tour-complete
+ * @description Mark user app tour as completed
+ * @requiresAuth JWT token in Authorization header
+ * @returns {Object} Success message
+ */
 app.post("/api/auth/tour-complete", authenticateToken, async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.userId;
@@ -423,6 +511,12 @@ app.post("/api/auth/tour-complete", authenticateToken, async (req: AuthRequest, 
   }
 });
 
+/**
+ * @route GET /api/subscription
+ * @description Get user subscription information and available tiers
+ * @requiresAuth JWT token in Authorization header
+ * @returns {Object} Subscription tier, Stripe IDs, and available tier details
+ */
 app.get("/api/subscription", authenticateToken, async (req: AuthRequest, res) => {
   try {
     const user = db.prepare(
@@ -463,6 +557,13 @@ app.get("/api/subscription", authenticateToken, async (req: AuthRequest, res) =>
   }
 });
 
+/**
+ * @route POST /api/subscription/checkout
+ * @description Create Stripe checkout session for premium subscription
+ * @requiresAuth JWT token in Authorization header
+ * @body {string} priceId - Stripe price ID for the subscription
+ * @returns {Object} Success with checkout URL
+ */
 app.post("/api/subscription/checkout", authenticateToken, async (req: AuthRequest, res) => {
   try {
     const { priceId } = req.body;
@@ -506,6 +607,13 @@ app.post("/api/subscription/checkout", authenticateToken, async (req: AuthReques
   }
 });
 
+/**
+ * @route POST /api/webhooks/stripe
+ * @description Handle Stripe webhook events (checkout.session.completed, customer.subscription.deleted, invoice.payment_failed)
+ * @requiresStripeSignature Stripe signature verification
+ * @body {Buffer} Raw Stripe webhook payload
+ * @returns {Object} Acknowledgment of webhook receipt
+ */
 app.post("/api/webhooks/stripe", express.raw({ type: 'application/json' }), async (req, res) => {
   const Stripe = (await import('stripe')).default;
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -560,6 +668,12 @@ app.post("/api/webhooks/stripe", express.raw({ type: 'application/json' }), asyn
   }
 });
 
+/**
+ * @route GET /api/analytics/daily-active-users
+ * @description Get count of daily active users
+ * @query {string} [date] - Date in YYYY-MM-DD format (defaults to today)
+ * @returns {Object} Date and daily active user count
+ */
 app.get("/api/analytics/daily-active-users", (req, res) => {
   const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
   try {
@@ -571,6 +685,12 @@ app.get("/api/analytics/daily-active-users", (req, res) => {
   }
 });
 
+/**
+ * @route GET /api/analytics/signups
+ * @description Get number of user signups since a given date
+ * @query {string} [since] - ISO date string (defaults to 30 days ago)
+ * @returns {Object} Since date and signup count
+ */
 app.get("/api/analytics/signups", (req, res) => {
   const since = (req.query.since as string) || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   try {
@@ -582,6 +702,12 @@ app.get("/api/analytics/signups", (req, res) => {
   }
 });
 
+/**
+ * @route GET /api/analytics/retention
+ * @description Get user retention statistics for day 1, 7, or 30
+ * @query {number} [day=1] - Retention period (must be 1, 7, or 30)
+ * @returns {Object} Retention statistics for the specified day
+ */
 app.get("/api/analytics/retention", (req, res) => {
   const day = parseInt(req.query.day as string) || 1;
   if (![1, 7, 30].includes(day)) {
@@ -596,6 +722,12 @@ app.get("/api/analytics/retention", (req, res) => {
   }
 });
 
+/**
+ * @route GET /api/analytics/paper-trades
+ * @description Get count of paper trades since a given date
+ * @query {string} [since] - ISO date string (optional)
+ * @returns {Object} Since date and paper trades count
+ */
 app.get("/api/analytics/paper-trades", (req, res) => {
   const since = req.query.since as string | undefined;
   try {
@@ -607,6 +739,14 @@ app.get("/api/analytics/paper-trades", (req, res) => {
   }
 });
 
+/**
+ * @route POST /api/analytics/track
+ * @description Track a user event (signup, login, prediction_viewed, paper_trade_placed, premium_upgrade, premium_cancelled)
+ * @requiresAuth JWT token in Authorization header
+ * @body {string} event_type - Type of event to track
+ * @body {Object} [metadata] - Optional event metadata
+ * @returns {Object} Success status
+ */
 app.post("/api/analytics/track", authenticateToken, (req: AuthRequest, res) => {
   try {
     const { event_type, metadata } = req.body;
@@ -625,6 +765,12 @@ app.post("/api/analytics/track", authenticateToken, (req: AuthRequest, res) => {
   }
 });
 
+/**
+ * @route GET /api/streaks
+ * @description Get user's current streak information
+ * @requiresAuth JWT token in Authorization header
+ * @returns {Object} Success status and streak info
+ */
 app.get("/api/streaks", authenticateToken, (req: AuthRequest, res) => {
   try {
     const streakInfo = getStreakInfo(req.user!.userId);
@@ -635,6 +781,13 @@ app.get("/api/streaks", authenticateToken, (req: AuthRequest, res) => {
   }
 });
 
+/**
+ * @route POST /api/streaks/record
+ * @description Record user activity for streak tracking
+ * @requiresAuth JWT token in Authorization header
+ * @body {string} [activityType='prediction_view'] - Type of activity performed
+ * @returns {Object} Success status and updated streak info
+ */
 app.post("/api/streaks/record", authenticateToken, (req: AuthRequest, res) => {
   try {
     const activityType = req.body.activityType || 'prediction_view';
@@ -647,6 +800,12 @@ app.post("/api/streaks/record", authenticateToken, (req: AuthRequest, res) => {
   }
 });
 
+/**
+ * @route GET /api/favorite-teams
+ * @description Get user's favorite teams
+ * @requiresAuth JWT token in Authorization header
+ * @returns {Object} Success status and list of favorite teams
+ */
 app.get("/api/favorite-teams", authenticateToken, (req: AuthRequest, res) => {
   try {
     const teams = getFavoriteTeams(req.user!.userId);
@@ -657,6 +816,13 @@ app.get("/api/favorite-teams", authenticateToken, (req: AuthRequest, res) => {
   }
 });
 
+/**
+ * @route POST /api/favorite-teams
+ * @description Add a team to user's favorites
+ * @requiresAuth JWT token in Authorization header
+ * @body {string} teamAbbreviation - Team abbreviation (e.g., 'LAL')
+ * @returns {Object} Success status and updated list of favorite teams
+ */
 app.post("/api/favorite-teams", authenticateToken, (req: AuthRequest, res) => {
   try {
     const { teamAbbreviation } = req.body;
@@ -672,6 +838,13 @@ app.post("/api/favorite-teams", authenticateToken, (req: AuthRequest, res) => {
   }
 });
 
+/**
+ * @route DELETE /api/favorite-teams/:team
+ * @description Remove a team from user's favorites
+ * @requiresAuth JWT token in Authorization header
+ * @param {string} team - Team abbreviation to remove
+ * @returns {Object} Success status and updated list of favorite teams
+ */
 app.delete("/api/favorite-teams/:team", authenticateToken, (req: AuthRequest, res) => {
   try {
     const teamAbbrev = req.params.team.toUpperCase();
@@ -684,6 +857,12 @@ app.delete("/api/favorite-teams/:team", authenticateToken, (req: AuthRequest, re
   }
 });
 
+/**
+ * @route POST /api/digest/send
+ * @description Send daily prediction digest email to all subscribed users
+ * @query {string} [date] - Game date for predictions (YYYY-MM-DD, defaults to today)
+ * @returns {Object} Success status with sent/failed counts
+ */
 app.post("/api/digest/send", async (req: express.Request, res: express.Response) => {
   try {
     const yesterday = new Date();
@@ -746,6 +925,13 @@ app.post("/api/digest/send", async (req: express.Request, res: express.Response)
   }
 });
 
+/**
+ * @route GET /api/predictions
+ * @description Get NBA player predictions for a given game date
+ * @query {string} [date] - Game date in YYYY-MM-DD format (defaults to today)
+ * @returns {Object} Game list, player predictions, and top players with confidence scores
+ * @cache 10 minute TTL on predictions
+ */
 app.get("/api/predictions", async (req, res) => {
   const gameDate = (req.query.date as string) || new Date().toISOString().split("T")[0];
   try {
@@ -844,6 +1030,20 @@ app.get("/api/predictions", async (req, res) => {
   }
 });
 
+/**
+ * @route POST /api/predictions
+ * @description Create a new prediction record manually
+ * @body {number} player_id - Player ID
+ * @body {string} game_date - Game date (YYYY-MM-DD)
+ * @body {number} predicted_pts - Predicted points
+ * @body {number} predicted_reb - Predicted rebounds
+ * @body {number} predicted_ast - Predicted assists
+ * @body {number} predicted_stl - Predicted steals
+ * @body {number} predicted_blk - Predicted blocks
+ * @body {number} predicted_threes - Predicted 3-pointers
+ * @body {number} confidence - Confidence score (0-1)
+ * @returns {Object} Created prediction ID and message
+ */
 app.post("/api/predictions", (req, res) => {
   try {
     const { player_id, game_date, predicted_pts, predicted_reb, predicted_ast, predicted_stl, predicted_blk, predicted_threes, confidence } = req.body;
@@ -864,6 +1064,12 @@ app.post("/api/predictions", (req, res) => {
   }
 });
 
+/**
+ * @route GET /api/predictions/:id/result
+ * @description Get a specific prediction with its result (if game has completed)
+ * @param {number} id - Prediction ID
+ * @returns {Object} Prediction details including predicted vs actual stats
+ */
 app.get("/api/predictions/:id/result", (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -914,6 +1120,11 @@ app.get("/api/predictions/:id/result", (req, res) => {
   }
 });
 
+/**
+ * @route GET /api/history
+ * @description Get prediction history (last 200 predictions)
+ * @returns {Array} Array of historical predictions with player info
+ */
 app.get("/api/history", (_req, res) => {
   const rows = db.prepare(`
     SELECT p.*, pl.first_name, pl.last_name, pl.team_abbreviation, pl.position
@@ -948,6 +1159,13 @@ function calculateStatCalibration(predictions: any[], stat: string, threshold: n
   return correct / validPredictions.length;
 }
 
+/**
+ * @route GET /api/predictions/score/:game_id
+ * @description Score predictions for a specific game date
+ * @param {string} game_id - Game date (YYYY-MM-DD)
+ * @query {number} [threshold=0.1] - Calibration threshold (default 10%)
+ * @returns {Object} MAE, calibration scores, and accuracy by stat type
+ */
 app.get("/api/predictions/score/:game_id", (req, res) => {
   try {
     const gameId = req.params.game_id;
@@ -1009,6 +1227,11 @@ app.get("/api/predictions/score/:game_id", (req, res) => {
   }
 });
 
+/**
+ * @route GET /api/accuracy
+ * @description Get prediction accuracy summary for the last 30 days
+ * @returns {Array} Daily prediction counts and average confidence scores
+ */
 app.get("/api/accuracy", (_req, res) => {
   const rows = db.prepare(`
     SELECT game_date,
@@ -1022,6 +1245,12 @@ app.get("/api/accuracy", (_req, res) => {
   res.json(rows);
 });
 
+/**
+ * @route GET /api/players/search
+ * @description Search for players by first or last name
+ * @query {string} q - Search query (minimum 2 characters)
+ * @returns {Array} Array of matching players (max 20)
+ */
 app.get("/api/players/search", (req, res) => {
   const q = req.query.q as string;
   if (!q || q.length < 2) return res.json([]);
@@ -1033,6 +1262,13 @@ app.get("/api/players/search", (req, res) => {
   res.json(rows);
 });
 
+/**
+ * @route GET /api/players/:id/betting-lines
+ * @description Get betting lines and probabilities for a specific player
+ * @param {number} id - Player ID
+ * @query {string} [date] - Game date (YYYY-MM-DD, defaults to today)
+ * @returns {Object} Player info, probability distributions, betting lines, and best bets
+ */
 app.get("/api/players/:id/betting-lines", async (req, res) => {
   try {
     const playerId = parseInt(req.params.id);
@@ -1088,6 +1324,13 @@ app.get("/api/players/:id/betting-lines", async (req, res) => {
   }
 });
 
+/**
+ * @route GET /api/best-bets
+ * @description Get best betting opportunities for a given game date
+ * @query {string} [date] - Game date (YYYY-MM-DD, defaults to today)
+ * @query {number} [minEdge=0.15] - Minimum edge threshold
+ * @returns {Object} Game date, total games analyzed, and array of best bets sorted by edge
+ */
 app.get("/api/best-bets", async (req, res) => {
   try {
     const gameDate = (req.query.date as string) || new Date().toISOString().split("T")[0];
@@ -1160,6 +1403,11 @@ app.get("/api/best-bets", async (req, res) => {
   }
 });
 
+/**
+ * @route POST /api/ingest/today
+ * @description Ingest today's NBA games and player data
+ * @returns {Object} Success status and ingestion results
+ */
 app.post("/api/ingest/today", async (_req, res) => {
   try {
     const result = await ingestToday();
@@ -1169,6 +1417,12 @@ app.post("/api/ingest/today", async (_req, res) => {
   }
 });
 
+/**
+ * @route POST /api/ingest/players
+ * @description Ingest player roster data from NBA API
+ * @body {number} [pageLimit=50] - Number of players to ingest per page
+ * @returns {Object} Success status and count of players ingested
+ */
 app.post("/api/ingest/players", async (req, res) => {
   try {
     const pageLimit = parseInt(req.body.pageLimit as string) || 50;
@@ -1179,6 +1433,12 @@ app.post("/api/ingest/players", async (req, res) => {
   }
 });
 
+/**
+ * @route POST /api/ingest/stats
+ * @description Ingest historical player stats for given dates
+ * @body {string[]} [dates] - Array of dates in YYYY-MM-DD format (defaults to today)
+ * @returns {Object} Success status, count of stats ingested, and dates processed
+ */
 app.post("/api/ingest/stats", async (req, res) => {
   try {
     const dates: string[] = req.body.dates || [new Date().toISOString().slice(0, 10)];
@@ -1190,6 +1450,12 @@ app.post("/api/ingest/stats", async (req, res) => {
 });
 
 // Paper Trading endpoints
+/**
+ * @route POST /api/paper-trading/init
+ * @description Initialize paper trading with a starting bankroll balance
+ * @body {number} [startBalance=10000] - Starting balance in dollars
+ * @returns {Object} Success status and bankroll object
+ */
 app.post("/api/paper-trading/init", (req, res) => {
   try {
     const startBalance = parseFloat(req.body.startBalance as string) || 10000;
@@ -1201,6 +1467,11 @@ app.post("/api/paper-trading/init", (req, res) => {
   }
 });
 
+/**
+ * @route GET /api/paper-trading/bankroll
+ * @description Get current paper trading bankroll (initializes if none exists)
+ * @returns {Object} Bankroll with balance, total wagered, P/L, win rate, and ROI
+ */
 app.get("/api/paper-trading/bankroll", (_req, res) => {
   try {
     let bankroll = getBankroll();
@@ -1214,6 +1485,11 @@ app.get("/api/paper-trading/bankroll", (_req, res) => {
   }
 });
 
+/**
+ * @route GET /api/paper-trading/stats
+ * @description Get aggregated paper trading statistics
+ * @returns {Object} Bet stats including win rate, ROI, and totals
+ */
 app.get("/api/paper-trading/stats", (_req, res) => {
   try {
     const stats = getBetStats();
@@ -1224,6 +1500,11 @@ app.get("/api/paper-trading/stats", (_req, res) => {
   }
 });
 
+/**
+ * @route GET /api/paper-trading/bets/open
+ * @description Get all open (unsettled) paper bets
+ * @returns {Array} Array of open bet objects
+ */
 app.get("/api/paper-trading/bets/open", (_req, res) => {
   try {
     const bets = getOpenBets();
@@ -1234,6 +1515,12 @@ app.get("/api/paper-trading/bets/open", (_req, res) => {
   }
 });
 
+/**
+ * @route GET /api/paper-trading/bets/history
+ * @description Get paper betting history
+ * @query {number} [limit=50] - Maximum number of bets to return
+ * @returns {Array} Array of historical bet objects
+ */
 app.get("/api/paper-trading/bets/history", (req, res) => {
   try {
     const limit = parseInt(req.query.limit as string) || 50;
@@ -1245,6 +1532,22 @@ app.get("/api/paper-trading/bets/history", (req, res) => {
   }
 });
 
+/**
+ * @route POST /api/paper-trading/bets
+ * @description Place a new paper bet
+ * @body {number} playerId - Player ID
+ * @body {string} playerName - Player name
+ * @body {string} [teamAbbrev] - Team abbreviation
+ * @body {string} gameDate - Game date (YYYY-MM-DD)
+ * @body {string} statType - Stat type (pts, reb, ast)
+ * @body {number} line - Betting line value
+ * @body {string} overOrUnder - 'over' or 'under'
+ * @body {number} odds - American odds (e.g., -110)
+ * @body {number} stake - Amount wagered
+ * @body {number} [edge=0] - Calculated edge
+ * @body {number} probability - Win probability
+ * @returns {Object} Success status and created bet object
+ */
 app.post("/api/paper-trading/bets", (req, res) => {
   try {
     const {
@@ -1276,6 +1579,14 @@ app.post("/api/paper-trading/bets", (req, res) => {
   }
 });
 
+/**
+ * @route POST /api/paper-trading/kelly
+ * @description Calculate Kelly Criterion for a given probability and odds
+ * @body {number} probability - Win probability (0-1)
+ * @body {number} odds - American odds (e.g., -110)
+ * @body {number} [divisor] - Kelly divisor for conservative betting
+ * @returns {Object} Kelly stake, edge, expected value, and fractional Kelly
+ */
 app.post("/api/paper-trading/kelly", (req, res) => {
   try {
     const { probability, odds, divisor } = req.body;
@@ -1297,6 +1608,13 @@ app.post("/api/paper-trading/kelly", (req, res) => {
   }
 });
 
+/**
+ * @route POST /api/paper-trading/settle
+ * @description Settle an open paper bet with the actual result
+ * @body {number} betId - Bet ID to settle
+ * @body {number} actualValue - Actual stat value that occurred
+ * @returns {Object} Success status and updated bet object
+ */
 app.post("/api/paper-trading/settle", (req, res) => {
   try {
     const { betId, actualValue } = req.body;
@@ -1316,6 +1634,11 @@ app.post("/api/paper-trading/settle", (req, res) => {
   }
 });
 
+/**
+ * @route POST /api/paper-trading/reset
+ * @description Reset paper trading (clear all bets and reset bankroll)
+ * @returns {Object} Success status and reset bankroll
+ */
 app.post("/api/paper-trading/reset", (_req, res) => {
   try {
     resetPaperTrading();
@@ -1327,6 +1650,15 @@ app.post("/api/paper-trading/reset", (_req, res) => {
   }
 });
 
+/**
+ * @route POST /api/paper-trading/simulate
+ * @description Automatically simulate paper bets for a game date based on predictions
+ * @body {string} [date] - Game date (YYYY-MM-DD, defaults to today)
+ * @body {number} [minConfidence=0.7] - Minimum prediction confidence threshold
+ * @body {number} [minEdge=0.15] - Minimum edge threshold
+ * @body {number} [maxBets=10] - Maximum number of bets to place
+ * @returns {Object} Game date, number of bets placed, total stake, and bet details
+ */
 app.post("/api/paper-trading/simulate", async (req, res) => {
   try {
     const gameDate = (req.body.date as string) || new Date().toISOString().split("T")[0];

@@ -58,6 +58,10 @@ async function apiGet<T>(path: string, params?: Record<string, string>): Promise
   return res.json() as Promise<BdlResponse<T>>;
 }
 
+/**
+ * Fetch all NBA games for today with pagination support.
+ * @returns Array of games for today
+ */
 export async function fetchTodayGames(): Promise<BdlGame[]> {
   const today = new Date().toISOString().slice(0, 10);
   const all: BdlGame[] = [];
@@ -72,6 +76,11 @@ export async function fetchTodayGames(): Promise<BdlGame[]> {
   return all;
 }
 
+/**
+ * Fetch all players with pagination.
+ * @param pageLimit - Maximum number of pages to fetch (default 50)
+ * @returns Array of all players
+ */
 export async function fetchAllPlayers(pageLimit = 50): Promise<BdlPlayer[]> {
   const all: BdlPlayer[] = [];
   let cursor: number | null = null;
@@ -87,6 +96,11 @@ export async function fetchAllPlayers(pageLimit = 50): Promise<BdlPlayer[]> {
   return all;
 }
 
+/**
+ * Fetch all player stats for a specific date.
+ * @param date - Date in YYYY-MM-DD format
+ * @returns Array of player stats for the date
+ */
 export async function fetchStatsForDate(date: string): Promise<BdlStat[]> {
   const all: BdlStat[] = [];
   let cursor: number | null = null;
@@ -100,6 +114,10 @@ export async function fetchStatsForDate(date: string): Promise<BdlStat[]> {
   return all;
 }
 
+/**
+ * Insert or update games in the database.
+ * @param games - Array of games to insert
+ */
 export function insertGames(games: BdlGame[]): void {
   const db = getDb();
   const stmt = db.prepare(`
@@ -130,6 +148,10 @@ export function insertGames(games: BdlGame[]): void {
   tx(games);
 }
 
+/**
+ * Insert or update players in the database.
+ * @param players - Array of players to insert
+ */
 export function insertPlayers(players: BdlPlayer[]): void {
   const db = getDb();
   const stmt = db.prepare(`
@@ -158,6 +180,10 @@ export function insertPlayers(players: BdlPlayer[]): void {
   tx(players);
 }
 
+/**
+ * Insert or update player stats in the database with running average calculation.
+ * @param stats - Array of stats to insert
+ */
 export function insertStats(stats: BdlStat[]): void {
   const db = getDb();
   const stmt = db.prepare(`
@@ -200,6 +226,10 @@ export function insertStats(stats: BdlStat[]): void {
   tx(stats);
 }
 
+/**
+ * Fetch and ingest today's games and stats.
+ * @returns Object with count of games and stats ingested
+ */
 export async function ingestToday(): Promise<{ games: number; stats: number }> {
   const games = await fetchTodayGames();
   insertGames(games);
@@ -209,12 +239,22 @@ export async function ingestToday(): Promise<{ games: number; stats: number }> {
   return { games: games.length, stats: stats.length };
 }
 
+/**
+ * Fetch and ingest all players.
+ * @param pageLimit - Maximum pages to fetch (default 50)
+ * @returns Number of players ingested
+ */
 export async function ingestPlayers(pageLimit = 50): Promise<number> {
   const players = await fetchAllPlayers(pageLimit);
   insertPlayers(players);
   return players.length;
 }
 
+/**
+ * Fetch and ingest historical stats for multiple dates.
+ * @param dates - Array of dates in YYYY-MM-DD format
+ * @returns Total number of stats ingested
+ */
 export async function ingestHistoricalStats(dates: string[]): Promise<number> {
   let total = 0;
   for (const date of dates) {

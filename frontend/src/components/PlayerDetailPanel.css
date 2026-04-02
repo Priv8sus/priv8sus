@@ -216,3 +216,30 @@
   color: #22c55e;
   font-size: 13px;
 }
+
+@media (max-width: 480px) {
+  .panel-content {
+    width: 100%;
+    max-width: 100vw;
+  }
+
+  .comparison-header,
+  .comparison-row {
+    grid-template-columns: 1fr 50px 50px;
+    font-size: 12px;
+  }
+
+  .col-avg {
+    display: none;
+  }
+
+  .best-bet {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .bet-edge {
+    align-self: flex-end;
+  }
+}

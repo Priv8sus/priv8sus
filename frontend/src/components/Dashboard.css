@@ -19,6 +19,51 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
+}
+
+.streak-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.streak-counter {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f97316;
+}
+
+.streak-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.badge-7-day {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge-30-day {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.badge-100-day {
+  background: #f3e8ff;
+  color: #6b21a8;
 }
 
 .logo {

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1625"/>
+      <stop offset="100%" style="stop-color:#0d0d12"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#aa3bff"/>
+      <stop offset="100%" style="stop-color:#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <rect width="1080" height="1080" fill="url(#bgGrad)" rx="24"/>
+  <rect x="60" y="60" width="960" height="960" fill="none" stroke="#2e303a" stroke-width="2" rx="16"/>
+  <rect x="100" y="100" width="880" height="880" fill="none" stroke="url(#accentGrad)" stroke-width="3" rx="12"/>
+  <circle cx="540" cy="320" r="80" fill="url(#accentGrad)" opacity="0.2"/>
+  <circle cx="540" cy="320" r="50" fill="url(#accentGrad)"/>
+  <path d="M510 320 L530 340 L570 290" stroke="#ffffff" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="540" y="500" font-family="system-ui, sans-serif" font-size="56" font-weight="700" fill="#ffffff" text-anchor="middle">No Data Harvesting.</text>
+  <text x="540" y="600" font-family="system-ui, sans-serif" font-size="56" font-weight="700" fill="#ffffff" text-anchor="middle">No Tracking.</text>
+  <text x="540" y="720" font-family="system-ui, sans-serif" font-size="56" font-weight="300" fill="#c084fc" text-anchor="middle">Just Predictions.</text>
+  <text x="540" y="850" font-family="system-ui, sans-serif" font-size="32" fill="#6b6375" text-anchor="middle">Predict. Profit. Keep your secrets.</text>
+  <text x="540" y="920" font-family="system-ui, sans-serif" font-size="28" fill="#aa3bff" text-anchor="middle">priv8sus.com</text>
+  <text x="540" y="970" font-family="system-ui, sans-serif" font-size="20" fill="#6b6375" text-anchor="middle">#PrivacyFirst #Priv8sus</text>
+</svg>
