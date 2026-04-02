@@ -7,6 +7,7 @@ import { TopPredictions } from './components/TopPredictions';
 import { LandingPage } from './components/LandingPage';
 import { UserProfile } from './components/UserProfile';
 import { TourGuide, useTourComplete } from './components/TourGuide';
+import { WelcomeScreen, useWelcomeComplete } from './components/WelcomeScreen';
 import type { PredictionsResponse, PlayerPrediction } from './types/predictions';
 import './App.css';
 
@@ -215,6 +216,7 @@ function AppInner() {
   const { user, isLoading } = useAuth();
   const [showDashboard, setShowDashboard] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const { completed: welcomeCompleted, markComplete: markWelcomeComplete } = useWelcomeComplete();
 
   useEffect(() => {
     if (user) {
@@ -229,12 +231,18 @@ function AppInner() {
   if (showDashboard) {
     return (
       <div>
-        <button 
+        <button
           className="back-to-landing"
           onClick={() => setShowDashboard(false)}
         >
           ← Back to Home
         </button>
+        {!welcomeCompleted && (
+          <WelcomeScreen
+            onContinue={() => markWelcomeComplete()}
+            onSkip={() => markWelcomeComplete()}
+          />
+        )}
         <Dashboard showProfile={() => setShowProfile(true)} />
         {showProfile && <UserProfile onClose={() => setShowProfile(false)} />}
       </div>
