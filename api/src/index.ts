@@ -25,6 +25,7 @@ import {
   resetPaperTrading,
   probabilityToAmerican,
 } from "./paper-trading.js";
+import { trackEvent, getDailyActiveUsers, getSignupsSince, getPaperTradesCount, getRetentionStats } from "./analytics.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -393,15 +394,20 @@ app.post("/api/webhooks/stripe", express.raw({ type: 'application/json' }), asyn
           db.prepare(
             "UPDATE users SET subscription_tier = 'premium', stripe_subscription_id = ?, updated_at = datetime('now') WHERE id = ?"
           ).run(session.subscription, userId);
+          trackEvent('premium_upgrade', parseInt(userId), { subscription_id: session.subscription });
           logger.info(`User ${userId} upgraded to premium`);
         }
         break;
       }
       case 'customer.subscription.deleted': {
         const subscription = event.data.object;
+        const user = db.prepare("SELECT id FROM users WHERE stripe_subscription_id = ?").get(subscription.id) as { id: number } | undefined;
         db.prepare(
           "UPDATE users SET subscription_tier = 'free', stripe_subscription_id = NULL, updated_at = datetime('now') WHERE stripe_subscription_id = ?"
         ).run(subscription.id);
+        if (user) {
+          trackEvent('premium_cancelled', user.id, { subscription_id: subscription.id });
+        }
         logger.info(`Subscription ${subscription.id} cancelled`);
         break;
       }
@@ -415,6 +421,53 @@ app.post("/api/webhooks/stripe", express.raw({ type: 'application/json' }), asyn
   } catch (err: any) {
     logger.error("Webhook handler error", { error: err.message });
     res.status(500).json({ error: "Webhook handler failed" });
+  }
+});
+
+app.get("/api/analytics/daily-active-users", (req, res) => {
+  const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+  try {
+    const count = getDailyActiveUsers(date);
+    res.json({ date, daily_active_users: count });
+  } catch (err: any) {
+    logger.error("Daily active users error", { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/analytics/signups", (req, res) => {
+  const since = (req.query.since as string) || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  try {
+    const count = getSignupsSince(since);
+    res.json({ since, signups: count });
+  } catch (err: any) {
+    logger.error("Signups query error", { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/analytics/retention", (req, res) => {
+  const day = parseInt(req.query.day as string) || 1;
+  if (![1, 7, 30].includes(day)) {
+    return res.status(400).json({ error: "day must be 1, 7, or 30" });
+  }
+  try {
+    const stats = getRetentionStats(day as 1 | 7 | 30);
+    res.json({ day, ...stats });
+  } catch (err: any) {
+    logger.error("Retention query error", { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/analytics/paper-trades", (req, res) => {
+  const since = req.query.since as string | undefined;
+  try {
+    const count = getPaperTradesCount(since);
+    res.json({ since: since || 'all', paper_trades: count });
+  } catch (err: any) {
+    logger.error("Paper trades query error", { error: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 

@@ -1,4 +1,5 @@
 import { getDb } from './db.js';
+import { trackEvent } from './analytics.js';
 import { logger } from './utils/logging.js';
 
 export interface PaperBet {
@@ -128,9 +129,20 @@ export function placeBet(
   `).run(stake, stake);
 
   const bet = db.prepare('SELECT * FROM paper_bets WHERE id = ?').get(result.lastInsertRowid) as PaperBet;
-  
+
   logger.info('Placed paper bet', { betId: bet.id, playerName, statType, line, stake });
-  
+
+  trackEvent('paper_trade_placed', undefined, {
+    bet_id: bet.id,
+    player_id: playerId,
+    player_name: playerName,
+    stat_type: statType,
+    line,
+    stake,
+    edge,
+    probability
+  });
+
   return bet;
 }
 
