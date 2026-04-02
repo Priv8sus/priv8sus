@@ -39,6 +39,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return res.json();
   };
 
+  const trackBackendEvent = async (eventType: string, metadata?: Record<string, unknown>) => {
+    try {
+      await fetchWithAuth('/api/analytics/track', {
+        method: 'POST',
+        body: JSON.stringify({ event_type: eventType, metadata }),
+      });
+    } catch {
+      // Silently fail - analytics should not break auth flow
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
@@ -115,6 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             subscription_tier: data.user.subscriptionTier,
           });
           captureLogin(data.user.id);
+          trackBackendEvent('user_login', { email: data.user.email });
         }
         return { success: true };
       }
@@ -142,6 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             subscription_tier: data.user.subscriptionTier,
           });
           captureSignup(data.user.id, email);
+          trackBackendEvent('user_signup', { email });
         }
         return { success: true };
       }

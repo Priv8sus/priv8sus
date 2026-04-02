@@ -13,6 +13,7 @@ import {
 } from "./probability-model.js";
 import { logger } from "./utils/logging.js";
 import { validateEnv } from "./env.js";
+import { errorTrackingMiddleware, getRecentErrors, getErrorStats, clearErrors } from "./error-tracking.js";
 import {
   initBankroll,
   getBankroll,
@@ -25,7 +26,8 @@ import {
   resetPaperTrading,
   probabilityToAmerican,
 } from "./paper-trading.js";
-import { trackEvent, getDailyActiveUsers, getSignupsSince, getPaperTradesCount, getRetentionStats } from "./analytics.js";
+import { trackEvent, getDailyActiveUsers, getSignupsSince, getPaperTradesCount, getRetentionStats, getStreakInfo, recordActivity, getFavoriteTeams, addFavoriteTeam, removeFavoriteTeam } from "./analytics.js";
+import { sendWelcomeEmail, queueEmail, processEmailQueue, recordEmailOpen, unsubscribeUser, sendDailyDigestToAllUsers } from "./email-service.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -42,6 +44,7 @@ const PORT = parseInt(process.env.PORT || "3000", 10);
 
 app.use(cors());
 app.use(express.json());
+app.use(errorTrackingMiddleware);
 
 process.on('uncaughtException', (error) => {
   logger.error('Uncaught exception', { error: error.message, stack: error.stack });
@@ -59,12 +62,74 @@ app.use(express.static(frontendPath));
 const db = initDatabase();
 migrateUsersTable(db);
 
+// Process email queue every minute
+setInterval(() => {
+  if (process.env.RESEND_API_KEY) {
+    processEmailQueue().catch(err => logger.error('Email queue error:', err));
+  }
+}, 60000);
+
 // Cache for predictions (refresh every 10 minutes)
 let predictionCache: { data: any; timestamp: number } | null = null;
 const CACHE_TTL = 10 * 60 * 1000;
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+app.get("/api/monitoring/errors", (req, res) => {
+  const limit = parseInt(req.query.limit as string) || 100;
+  const errors = getRecentErrors(limit);
+  res.json({ errors, count: errors.length });
+});
+
+app.get("/api/monitoring/error-stats", (req, res) => {
+  const stats = getErrorStats();
+  res.json({
+    ...stats,
+    timestamp: new Date().toISOString(),
+    healthy: stats.last24h < 100,
+  });
+});
+
+app.post("/api/monitoring/errors/clear", (req, res) => {
+  clearErrors();
+  logger.info('Error logs cleared by admin');
+  res.json({ success: true, message: 'Error logs cleared' });
+});
+
+app.get("/api/email/track/:trackingId", async (req, res) => {
+  await recordEmailOpen(req.params.trackingId);
+  res.setHeader('Content-Type', 'image/gif');
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'));
+});
+
+app.post("/api/email/unsubscribe", async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) {
+      return res.status(400).json({ error: "userId is required" });
+    }
+    const success = await unsubscribeUser(parseInt(userId));
+    if (success) {
+      res.json({ success: true, message: "Unsubscribed successfully" });
+    } else {
+      res.status(404).json({ error: "User not found" });
+    }
+  } catch (err: any) {
+    logger.error("Unsubscribe error:", err);
+    res.status(500).json({ error: "Failed to unsubscribe" });
+  }
+});
+
+app.get("/api/email/unsubscribe", async (req, res) => {
+  const userId = req.query.uid as string;
+  if (!userId) {
+    return res.redirect('/?unsubscribe=error');
+  }
+  await unsubscribeUser(parseInt(userId));
+  res.redirect('/?unsubscribe=success');
 });
 
 function isValidEmail(email: string): boolean {
@@ -138,11 +203,22 @@ app.post("/api/auth/signup", async (req, res) => {
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
     const result = db.prepare("INSERT INTO users (email, password_hash) VALUES (?, ?)").run(normalizedEmail, passwordHash);
 
+    const userId = result.lastInsertRowid as number;
+    const user = { id: userId, email: normalizedEmail, created_at: new Date().toISOString() };
+
     const token = jwt.sign(
-      { userId: result.lastInsertRowid, email: normalizedEmail },
+      { userId, email: normalizedEmail },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
+
+    if (process.env.RESEND_API_KEY) {
+      sendWelcomeEmail(user).catch(err => logger.error('Welcome email error:', err));
+      const day1 = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const day3 = new Date(Date.now() + 72 * 60 * 60 * 1000);
+      queueEmail(userId, 'day1', day1).catch(err => logger.error('Queue day1 error:', err));
+      queueEmail(userId, 'day3', day3).catch(err => logger.error('Queue day3 error:', err));
+    }
 
     logger.info(`New user signup: ${normalizedEmail}`);
     res.status(201).json({
@@ -177,6 +253,11 @@ app.post("/api/auth/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials", message: "Email or password is incorrect" });
     }
 
+    const isFirstLogin = !user.first_login_at;
+    if (isFirstLogin) {
+      db.prepare("UPDATE users SET first_login_at = datetime('now') WHERE id = ?").run(user.id);
+    }
+
     const token = jwt.sign(
       { userId: user.id, email: user.email },
       JWT_SECRET,
@@ -188,7 +269,12 @@ app.post("/api/auth/login", async (req, res) => {
       success: true,
       message: "Login successful",
       token,
-      user: { id: user.id, email: user.email }
+      user: { 
+        id: user.id, 
+        email: user.email,
+        onboardingCompleted: user.onboarding_completed === 1,
+        isFirstLogin
+      }
     });
   } catch (err: any) {
     logger.error("Login error", { error: err.message });
@@ -220,7 +306,7 @@ const authenticateToken = (req: AuthRequest, res: express.Response, next: expres
 app.get("/api/auth/me", authenticateToken, async (req: AuthRequest, res) => {
   try {
     const user = db.prepare(
-      "SELECT id, email, subscription_tier, stripe_customer_id, created_at FROM users WHERE id = ?"
+      "SELECT id, email, subscription_tier, stripe_customer_id, created_at, onboarding_completed, first_login_at, tour_completed FROM users WHERE id = ?"
     ).get(req.user!.userId) as any;
 
     if (!user) {
@@ -233,7 +319,11 @@ app.get("/api/auth/me", authenticateToken, async (req: AuthRequest, res) => {
         id: user.id,
         email: user.email,
         subscriptionTier: user.subscription_tier,
-        createdAt: user.created_at
+        createdAt: user.created_at,
+        onboardingCompleted: user.onboarding_completed === 1,
+        firstLoginAt: user.first_login_at,
+        isFirstLogin: !user.first_login_at,
+        tourCompleted: user.tour_completed === 1
       }
     });
   } catch (err: any) {
@@ -284,6 +374,28 @@ app.put("/api/auth/profile", authenticateToken, async (req: AuthRequest, res) =>
   } catch (err: any) {
     logger.error("Update profile error", { error: err.message });
     res.status(500).json({ error: "Failed to update profile" });
+  }
+});
+
+app.post("/api/auth/onboarding-complete", authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.userId;
+    db.prepare("UPDATE users SET onboarding_completed = 1 WHERE id = ?").run(userId);
+    res.json({ success: true, message: "Onboarding completed" });
+  } catch (err: any) {
+    logger.error("Onboarding complete error", { error: err.message });
+    res.status(500).json({ error: "Failed to complete onboarding" });
+  }
+});
+
+app.post("/api/auth/tour-complete", authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.userId;
+    db.prepare("UPDATE users SET tour_completed = 1 WHERE id = ?").run(userId);
+    res.json({ success: true, message: "Tour completed" });
+  } catch (err: any) {
+    logger.error("Tour complete error", { error: err.message });
+    res.status(500).json({ error: "Failed to complete tour" });
   }
 });
 
@@ -471,6 +583,145 @@ app.get("/api/analytics/paper-trades", (req, res) => {
   }
 });
 
+app.post("/api/analytics/track", authenticateToken, (req: AuthRequest, res) => {
+  try {
+    const { event_type, metadata } = req.body;
+    if (!event_type) {
+      return res.status(400).json({ error: "event_type is required" });
+    }
+    const validEventTypes = ['user_signup', 'user_login', 'prediction_viewed', 'paper_trade_placed', 'premium_upgrade', 'premium_cancelled'];
+    if (!validEventTypes.includes(event_type)) {
+      return res.status(400).json({ error: "Invalid event_type" });
+    }
+    trackEvent(event_type, req.user!.userId, metadata);
+    res.json({ success: true });
+  } catch (err: any) {
+    logger.error("Track event error", { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/streaks", authenticateToken, (req: AuthRequest, res) => {
+  try {
+    const streakInfo = getStreakInfo(req.user!.userId);
+    res.json({ success: true, streak: streakInfo });
+  } catch (err: any) {
+    logger.error("Get streak error", { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/streaks/record", authenticateToken, (req: AuthRequest, res) => {
+  try {
+    const activityType = req.body.activityType || 'prediction_view';
+    recordActivity(req.user!.userId, activityType);
+    const streakInfo = getStreakInfo(req.user!.userId);
+    res.json({ success: true, streak: streakInfo });
+  } catch (err: any) {
+    logger.error("Record streak error", { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/favorite-teams", authenticateToken, (req: AuthRequest, res) => {
+  try {
+    const teams = getFavoriteTeams(req.user!.userId);
+    res.json({ success: true, teams });
+  } catch (err: any) {
+    logger.error("Get favorite teams error", { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/favorite-teams", authenticateToken, (req: AuthRequest, res) => {
+  try {
+    const { teamAbbreviation } = req.body;
+    if (!teamAbbreviation) {
+      return res.status(400).json({ error: "teamAbbreviation is required" });
+    }
+    addFavoriteTeam(req.user!.userId, teamAbbreviation.toUpperCase());
+    const teams = getFavoriteTeams(req.user!.userId);
+    res.json({ success: true, teams });
+  } catch (err: any) {
+    logger.error("Add favorite team error", { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/favorite-teams/:team", authenticateToken, (req: AuthRequest, res) => {
+  try {
+    const teamAbbrev = req.params.team.toUpperCase();
+    removeFavoriteTeam(req.user!.userId, teamAbbrev);
+    const teams = getFavoriteTeams(req.user!.userId);
+    res.json({ success: true, teams });
+  } catch (err: any) {
+    logger.error("Remove favorite team error", { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/digest/send", async (req: express.Request, res: express.Response) => {
+  try {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    
+    const gameDate = req.query.date as string || new Date().toISOString().split('T')[0];
+    
+    const gamesRes = await getGames(gameDate);
+    const games = gamesRes.data;
+
+    if (games.length === 0) {
+      return res.status(404).json({ error: "No games scheduled", message: "No games for today" });
+    }
+
+    const teamIds = new Set<number>();
+    games.forEach((g: any) => {
+      teamIds.add(g.home_team.id);
+      teamIds.add(g.visitor_team.id);
+    });
+
+    const players = await getTeamRoster([...teamIds]);
+    const playersWithPosition = players.filter((p: any) => p.position);
+
+    const seasonAverages = new Map<number, BDLSeasonAverage>();
+    const fetchLimit = Math.min(playersWithPosition.length, 50);
+
+    for (let i = 0; i < fetchLimit; i++) {
+      try {
+        const avg = await getSeasonAverages(playersWithPosition[i].id);
+        if (avg) seasonAverages.set(playersWithPosition[i].id, avg);
+        if (i % 5 === 4) await new Promise((r: any) => setTimeout(r, 200));
+      } catch (e: any) {
+        logger.warn(`Skipping player ${playersWithPosition[i].id} due to error: ${e.message}`);
+      }
+    }
+
+    const result = generatePredictions(playersWithPosition, seasonAverages, gameDate);
+    const topPredictions = result.topPlayers;
+
+    const yesterdayRows = db.prepare(`
+      SELECT AVG(ABS(actual_pts - predicted_pts)) as pts_mae,
+             AVG(ABS(actual_reb - predicted_reb)) as reb_mae,
+             AVG(ABS(actual_ast - predicted_ast)) as ast_mae
+      FROM predictions WHERE game_date = ? AND actual_pts IS NOT NULL
+    `).get(yesterdayStr) as any;
+
+    const yesterdayAccuracy = yesterdayRows ? {
+      ptsMAE: yesterdayRows.pts_mae,
+      rebMAE: yesterdayRows.reb_mae,
+      astMAE: yesterdayRows.ast_mae
+    } : null;
+
+    const { sent, failed } = await sendDailyDigestToAllUsers(topPredictions, yesterdayAccuracy);
+    
+    res.json({ success: true, digestSent: sent, digestFailed: failed });
+  } catch (err: any) {
+    logger.error("Send digest error", { error: err.message });
+    res.status(500).json({ error: "Failed to send digest" });
+  }
+});
+
 app.get("/api/predictions", async (req, res) => {
   const gameDate = (req.query.date as string) || new Date().toISOString().split("T")[0];
   try {
@@ -513,8 +764,8 @@ app.get("/api/predictions", async (req, res) => {
         if (avg) seasonAverages.set(playersToFetch[i].id, avg);
         // Small delay to be respectful
         if (i % 5 === 4) await new Promise((r) => setTimeout(r, 200));
-      } catch (e) {
-        // Skip on error
+      } catch (e: any) {
+        logger.warn(`Skipping player ${playersToFetch[i].id} due to error: ${e.message}`);
       }
     }
 
@@ -846,8 +1097,8 @@ app.get("/api/best-bets", async (req, res) => {
         const avg = await getSeasonAverages(playersWithPosition[i].id);
         if (avg) seasonAverages.set(playersWithPosition[i].id, avg);
         if (i % 5 === 4) await new Promise((r) => setTimeout(r, 200));
-      } catch (e) {
-        // Skip on error
+      } catch (e: any) {
+        logger.warn(`Skipping player ${playersWithPosition[i].id} due to error: ${e.message}`);
       }
     }
 
@@ -881,7 +1132,7 @@ app.get("/api/best-bets", async (req, res) => {
     });
   } catch (err: any) {
     logger.error("Best bets error", { error: err.message });
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Failed to generate best bets" });
   }
 });
 
@@ -1083,8 +1334,8 @@ app.post("/api/paper-trading/simulate", async (req, res) => {
         const avg = await getSeasonAverages(playersWithPosition[i].id);
         if (avg) seasonAverages.set(playersWithPosition[i].id, avg);
         if (i % 5 === 4) await new Promise((r) => setTimeout(r, 200));
-      } catch (e) {
-        // Skip on error
+      } catch (e: any) {
+        logger.warn(`Skipping player ${playersWithPosition[i].id} due to error: ${e.message}`);
       }
     }
 
@@ -1143,11 +1394,34 @@ app.post("/api/paper-trading/simulate", async (req, res) => {
   }
 });
 
+// Global error handler
+interface ApiError extends Error {
+  statusCode?: number;
+  expose?: boolean;
+}
+
+app.use((err: ApiError, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const statusCode = err.statusCode || 500;
+  const message = statusCode >= 500 && !err.expose ? 'Internal server error' : err.message;
+  
+  logger.error('Unhandled error', { 
+    error: err.message, 
+    stack: err.stack, 
+    path: (_req as any).path,
+    method: (_req as any).method 
+  });
+  
+  res.status(statusCode).json({ 
+    error: message,
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+});
+
 // SPA fallback
 app.get("*", (_req, res) => {
   res.sendFile(path.join(frontendPath, "index.html"), (err) => {
     if (err) {
-      res.status(404).json({ error: "Frontend not built. Run: npm run build:frontend" });
+      res.status(404).json({ error: "Frontend not found", message: "Please run: npm run build:frontend" });
     }
   });
 });
