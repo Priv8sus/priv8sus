@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { PlayerPrediction } from '../types/predictions';
 import './TopPredictions.css';
 
@@ -24,7 +25,34 @@ function getTrendClass(predicted: number, avg: number | undefined): string {
   return 'trend-neutral';
 }
 
+async function placePaperTrade(player: PlayerPrediction, statType: string, line: number, overOrUnder: 'over' | 'under', odds: number) {
+  const gameDate = new Date().toISOString().split('T')[0];
+  const response = await fetch('/api/paper-trading/bets', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      playerId: player.playerId,
+      playerName: player.playerName,
+      teamAbbrev: player.teamAbbrev,
+      gameDate,
+      statType,
+      line,
+      overOrUnder,
+      odds,
+      stake: 10,
+      edge: player.confidence - 0.5,
+      probability: player.confidence
+    })
+  });
+  if (!response.ok) {
+    throw new Error('Failed to place bet');
+  }
+  return response.json();
+}
+
 export function TopPredictions({ players, onPlayerClick }: TopPredictionsProps) {
+  const [tradingStates, setTradingStates] = useState<Record<number, 'idle' | 'loading' | 'success' | 'error'>>({});
+
   if (players.length === 0) {
     return (
       <div className="top-predictions empty">
@@ -33,20 +61,50 @@ export function TopPredictions({ players, onPlayerClick }: TopPredictionsProps) 
     );
   }
 
+  function handlePaperTrade(e: React.MouseEvent, player: PlayerPrediction) {
+    e.stopPropagation();
+    const state = tradingStates[player.playerId] || 'idle';
+    if (state !== 'idle') return;
+
+    setTradingStates(prev => ({ ...prev, [player.playerId]: 'loading' }));
+
+    const bestBet = player.bestBets?.[0];
+    if (!bestBet) {
+      setTradingStates(prev => ({ ...prev, [player.playerId]: 'error' }));
+      setTimeout(() => setTradingStates(prev => ({ ...prev, [player.playerId]: 'idle' })), 2000);
+      return;
+    }
+
+    placePaperTrade(player, bestBet.stat, bestBet.line, bestBet.overPayout !== undefined ? 'over' : 'under', bestBet.overPayout ? 110 : -110)
+      .then(() => {
+        setTradingStates(prev => ({ ...prev, [player.playerId]: 'success' }));
+        setTimeout(() => setTradingStates(prev => ({ ...prev, [player.playerId]: 'idle' })), 2000);
+      })
+      .catch(() => {
+        setTradingStates(prev => ({ ...prev, [player.playerId]: 'error' }));
+        setTimeout(() => setTradingStates(prev => ({ ...prev, [player.playerId]: 'idle' })), 2000);
+      });
+  }
+
   return (
     <div className="top-predictions">
       <h2>TOP PREDICTIONS</h2>
       <div className="predictions-list">
-        {players.map((player) => {
+        {players.map((player, index) => {
           const avg = player.seasonAverages;
           const confidencePercent = Math.round(player.confidence * 100);
-          
+          const isBestBet = index === 0 && confidencePercent >= 70;
+          const tradeState = tradingStates[player.playerId] || 'idle';
+
           return (
-            <div 
-              key={player.playerId} 
-              className="prediction-card"
+            <div
+              key={player.playerId}
+              className={`prediction-card ${isBestBet ? 'best-bet' : ''}`}
               onClick={() => onPlayerClick(player)}
             >
+              {isBestBet && (
+                <div className="best-bet-badge">TOP PICK FOR YOU</div>
+              )}
               <div className="player-header">
                 <div className="player-info">
                   <span className="player-name">{player.playerName}</span>
@@ -56,14 +114,14 @@ export function TopPredictions({ players, onPlayerClick }: TopPredictionsProps) 
                   {confidencePercent}%
                 </div>
               </div>
-              
+
               <div className="confidence-bar">
-                <div 
-                  className="confidence-fill" 
+                <div
+                  className="confidence-fill"
                   style={{ width: `${confidencePercent}%` }}
                 />
               </div>
-              
+
               <div className="stats-grid">
                 <div className="stat-row">
                   <span className="stat-label">Pts:</span>
@@ -102,6 +160,16 @@ export function TopPredictions({ players, onPlayerClick }: TopPredictionsProps) 
                   )}
                 </div>
               </div>
+
+              {isBestBet && (
+                <button
+                  className={`paper-trade-btn ${tradeState}`}
+                  onClick={(e) => handlePaperTrade(e, player)}
+                  disabled={tradeState !== 'idle'}
+                >
+                  {tradeState === 'loading' ? 'Placing...' : tradeState === 'success' ? 'Bet Placed!' : tradeState === 'error' ? 'Failed' : 'Paper Trade'}
+                </button>
+              )}
             </div>
           );
         })}

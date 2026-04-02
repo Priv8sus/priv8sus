@@ -42,6 +42,62 @@
   transform: translateY(-1px);
 }
 
+.prediction-card.best-bet {
+  border: 2px solid #fbbf24;
+  background: linear-gradient(135deg, #1a1a2e 0%, #1e1e38 50%, #2a2a1a 100%);
+}
+
+.best-bet-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #1a1a2e;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+.paper-trade-btn {
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: #22c55e;
+  color: #052e16;
+}
+
+.paper-trade-btn:hover:not(:disabled) {
+  background: #16a34a;
+  transform: translateY(-1px);
+}
+
+.paper-trade-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+.paper-trade-btn.loading {
+  background: #6b7280;
+  color: #fff;
+}
+
+.paper-trade-btn.success {
+  background: #22c55e;
+  color: #052e16;
+}
+
+.paper-trade-btn.error {
+  background: #ef4444;
+  color: #fff;
+}
+
 .player-header {
   display: flex;
   justify-content: space-between;
