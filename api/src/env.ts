@@ -9,7 +9,7 @@ const envSchema = z.object({
   DATABASE_PATH: z.string().default('./data/predictions.db'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   CORS_ORIGIN: z.string().default('*'),
-  JWT_SECRET: z.string().default('priv8sus-dev-secret-change-in-production'),
+  JWT_SECRET: z.string(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PRICE_ID_MONTHLY: z.string().optional(),

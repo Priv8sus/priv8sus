@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import path from "path";
 import { fileURLToPath } from "url";
 import { initDatabase, migrateUsersTable } from "./db.js";
@@ -12,7 +13,7 @@ import {
   findBestBets,
 } from "./probability-model.js";
 import { logger } from "./utils/logging.js";
-import { validateEnv } from "./env.js";
+import { validateEnv, EnvConfig } from "./env.js";
 import { errorTrackingMiddleware, getRecentErrors, getErrorStats, clearErrors } from "./error-tracking.js";
 import {
   initBankroll,
@@ -32,9 +33,13 @@ import { sendWelcomeEmail, queueEmail, processEmailQueue, recordEmailOpen, unsub
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+let config: EnvConfig;
 try {
-  const config = validateEnv();
+  config = validateEnv();
   logger.setLevel(config.LOG_LEVEL);
+  if (config.NODE_ENV === 'production' && config.JWT_SECRET === 'priv8sus-dev-secret-change-in-production') {
+    throw new Error('JWT_SECRET must be changed from default value in production');
+  }
 } catch (error) {
   console.error('Failed to validate environment:', error);
   process.exit(1);
@@ -44,6 +49,24 @@ const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
 app.use(cors());
+
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, please try again later." },
+});
+app.use(globalLimiter);
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many authentication attempts, please try again later." },
+});
+
 app.use(express.json());
 app.use(errorTrackingMiddleware);
 
@@ -175,10 +198,10 @@ app.post("/api/subscribe", (req, res) => {
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'priv8sus-dev-secret-change-in-production';
+const JWT_SECRET = config.JWT_SECRET;
 const SALT_ROUNDS = 10;
 
-app.post("/api/auth/signup", async (req, res) => {
+app.post("/api/auth/signup", authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -234,7 +257,7 @@ app.post("/api/auth/signup", async (req, res) => {
   }
 });
 
-app.post("/api/auth/login", async (req, res) => {
+app.post("/api/auth/login", authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
