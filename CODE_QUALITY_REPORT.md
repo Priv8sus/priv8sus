@@ -172,13 +172,13 @@ This cast is necessary but could be improved with better typing.
 | Priority | Item | File | Status |
 |----------|------|------|--------|
 | High | Remove console.log | sentry.ts:31 | ✅ DONE (2026-04-02) |
-| Medium | Consolidate Dashboard | App.tsx, Dashboard.tsx | Pending |
+| Medium | Consolidate Dashboard | App.tsx, Dashboard.tsx | ✅ DONE (2026-04-02) - Dead Dashboard.tsx removed |
 | Medium | Deduplicate utility functions | TopPredictions.tsx, PlayerDetailPanel.tsx | ✅ DONE (2026-04-02) |
-| Low | Add unit tests | - | Pending (BETA-186) |
-| Low | Remove dead code | Dashboard.tsx | Pending |
+| Low | Add unit tests | - | ✅ DONE (2026-04-02) - 57 tests passing |
+| Low | Remove dead code | Dashboard.tsx | ✅ DONE (2026-04-02) - Removed dead Dashboard.tsx + Dashboard.css |
 
 ---
 
 ## Verdict
 
-**Production-ready** after addressing the high-priority item (removing console.log) and medium-priority cleanup. The codebase is in good shape for launch.
+**Production-ready** after addressing all high and medium priority items. The codebase is in excellent shape for launch. All code quality action items are complete.
