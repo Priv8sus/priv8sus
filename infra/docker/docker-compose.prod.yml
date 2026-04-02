@@ -10,7 +10,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/priv8sus
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/priv8sus
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET}
       - LOG_LEVEL=info
