@@ -1,0 +1,37 @@
+name: Deploy to Railway (Production)
+
+on:
+  workflow_dispatch:
+    inputs:
+      railway_token:
+        description: 'Railway API Token'
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Configure Railway CLI
+        run: railway login --token-provision ${{ inputs.railway_token }}
+
+      - name: Deploy to Railway
+        run: |
+          cd infra/docker
+          railway up --prod --detached
+        env:
+          RAILWAY_TOKEN: ${{ inputs.railway_token }}
+
+      - name: Wait for deployment
+        run: sleep 30
+
+      - name: Get Railway status
+        run: railway status
+        env:
+          RAILWAY_TOKEN: ${{ inputs.railway_token }}
