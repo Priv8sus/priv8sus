@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { User, SubscriptionInfo } from '../types/auth';
 import { setUserId, clearUserId, captureSignup, captureLogin } from '../analytics';
 
@@ -27,7 +27,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(localStorage.getItem(TOKEN_KEY));
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string> || {}),
@@ -37,7 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const res = await fetch(url, { ...options, headers });
     return res.json();
-  };
+  }, [token]);
 
   const trackBackendEvent = async (eventType: string, metadata?: Record<string, unknown>) => {
     try {
@@ -50,15 +50,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
     setUser(null);
     setSubscription(null);
     clearUserId();
-  };
+  }, []);
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     if (!token) {
       setUser(null);
       setIsLoading(false);
@@ -81,9 +81,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout();
     }
     setIsLoading(false);
-  };
+  }, [token, fetchWithAuth, logout]);
 
-  const refreshSubscription = async () => {
+  const refreshSubscription = useCallback(async () => {
     if (!token) {
       setSubscription(null);
       return;
@@ -96,17 +96,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Silently fail
     }
-  };
+  }, [token, fetchWithAuth]);
 
   useEffect(() => {
     refreshUser();
-  }, [token]);
+  }, [refreshUser]);
 
   useEffect(() => {
     if (user) {
       refreshSubscription();
     }
-  }, [user]);
+  }, [user, refreshSubscription]);
 
   const login = async (email: string, password: string) => {
     try {

@@ -237,3 +237,71 @@ export function removeFavoriteTeam(userId: number, teamAbbrev: string): void {
   const db = getDb();
   db.prepare(`DELETE FROM favorite_teams WHERE user_id = ? AND team_abbreviation = ?`).run(userId, teamAbbrev);
 }
+
+export function getReferralStats(since: string): { totalReferrals: number; convertedReferrals: number; conversionRate: number } {
+  const db = getDb();
+  const result = db.prepare(`
+    SELECT 
+      COUNT(DISTINCT u.id) as total_referrals,
+      COUNT(DISTINCT CASE WHEN e.event_type = 'paper_trade_placed' THEN u.id END) as converted_referrals
+    FROM users u
+    LEFT JOIN events e ON u.id = e.user_id
+    WHERE u.referrer_id IS NOT NULL
+    AND DATE(u.created_at) >= DATE(?)
+  `).get(since) as { total_referrals: number; converted_referrals: number };
+
+  const totalReferrals = result?.total_referrals ?? 0;
+  const convertedReferrals = result?.converted_referrals ?? 0;
+  return {
+    totalReferrals,
+    convertedReferrals,
+    conversionRate: totalReferrals > 0 ? convertedReferrals / totalReferrals : 0
+  };
+}
+
+export function getConversionFunnel(startDate: string): { waitlist: number; signups: number; predictions: number; referrals: number; conversions: number } {
+  const db = getDb();
+  
+  const waitlistResult = db.prepare(`
+    SELECT COUNT(*) as count FROM subscribers WHERE DATE(subscribed_at) >= DATE(?)
+  `).get(startDate) as { count: number };
+
+  const signupsResult = db.prepare(`
+    SELECT COUNT(*) as count FROM events WHERE event_type = 'user_signup' AND DATE(created_at) >= DATE(?)
+  `).get(startDate) as { count: number };
+
+  const predictionsResult = db.prepare(`
+    SELECT COUNT(DISTINCT user_id) as count FROM events WHERE event_type = 'paper_trade_placed' AND DATE(created_at) >= DATE(?)
+  `).get(startDate) as { count: number };
+
+  const referralsResult = db.prepare(`
+    SELECT COUNT(*) as count FROM users WHERE referrer_id IS NOT NULL AND DATE(created_at) >= DATE(?)
+  `).get(startDate) as { count: number };
+
+  const conversionsResult = db.prepare(`
+    SELECT COUNT(DISTINCT u.id) as count FROM users u
+    JOIN events e ON u.id = e.user_id AND e.event_type = 'paper_trade_placed'
+    WHERE u.referrer_id IS NOT NULL AND DATE(u.created_at) >= DATE(?)
+  `).get(startDate) as { count: number };
+
+  return {
+    waitlist: waitlistResult?.count ?? 0,
+    signups: signupsResult?.count ?? 0,
+    predictions: predictionsResult?.count ?? 0,
+    referrals: referralsResult?.count ?? 0,
+    conversions: conversionsResult?.count ?? 0
+  };
+}
+
+export function getWaitlistToSignupRate(): { waitlistCount: number; signupCount: number; conversionRate: number } {
+  const db = getDb();
+  const waitlistCount = db.prepare(`SELECT COUNT(*) as count FROM subscribers`).get() as { count: number };
+  const signupCount = db.prepare(`SELECT COUNT(*) as count FROM events WHERE event_type = 'user_signup'`).get() as { count: number };
+  const wc = waitlistCount?.count ?? 0;
+  const sc = signupCount?.count ?? 0;
+  return {
+    waitlistCount: wc,
+    signupCount: sc,
+    conversionRate: wc > 0 ? sc / wc : 0
+  };
+}

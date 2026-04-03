@@ -27,11 +27,77 @@ import {
   resetPaperTrading,
   probabilityToAmerican,
   TYPICAL_PROP_ODDS,
+  getFilteredBetStats,
+  getROIBreakdown,
+  getFilteredBetHistory,
 } from "./paper-trading.js";
-import { trackEvent, getDailyActiveUsers, getSignupsSince, getPaperTradesCount, getRetentionStats, getStreakInfo, recordActivity, getFavoriteTeams, addFavoriteTeam, removeFavoriteTeam } from "./analytics.js";
+import { getDb } from './db.js';
+import { trackEvent, getDailyActiveUsers, getSignupsSince, getPaperTradesCount, getRetentionStats, getStreakInfo, recordActivity, getFavoriteTeams, addFavoriteTeam, removeFavoriteTeam, getReferralStats, getConversionFunnel, getWaitlistToSignupRate } from "./analytics.js";
 import { sendWelcomeEmail, queueEmail, processEmailQueue, recordEmailOpen, unsubscribeUser, sendDailyDigestToAllUsers } from "./email-service.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+interface ApiErrorResponse {
+  error: string;
+  code?: string;
+  details?: unknown;
+  timestamp: string;
+  requestId?: string;
+}
+
+function createErrorResponse(error: string, code?: string, details?: unknown): ApiErrorResponse {
+  return {
+    error,
+    code,
+    details,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+const DB_MAX_RETRIES = 3;
+const DB_RETRY_DELAY = 100;
+
+async function withDatabaseRetry<T>(operation: () => Promise<T>, context: string): Promise<T> {
+  let lastError: Error | undefined;
+  for (let attempt = 1; attempt <= DB_MAX_RETRIES; attempt++) {
+    try {
+      return await operation();
+    } catch (error: any) {
+      lastError = error;
+      logger.warn(`Database operation failed (attempt ${attempt}/${DB_MAX_RETRIES}): ${context}`, { error: error.message });
+      if (attempt < DB_MAX_RETRIES) {
+        await new Promise(resolve => setTimeout(resolve, DB_RETRY_DELAY * attempt));
+      }
+    }
+  }
+  logger.error(`Database operation failed after ${DB_MAX_RETRIES} attempts: ${context}`, { error: lastError?.message });
+  throw lastError;
+}
+
+const NBA_API_MAX_RETRIES = 3;
+const NBA_API_RETRY_DELAY = 500;
+
+async function withNbaApiRetry<T>(operation: () => Promise<T>, context: string): Promise<T> {
+  let lastError: Error | undefined;
+  for (let attempt = 1; attempt <= NBA_API_MAX_RETRIES; attempt++) {
+    try {
+      return await operation();
+    } catch (error: any) {
+      lastError = error;
+      const isRateLimit = error.message?.includes('429') || error.message?.includes('rate limit');
+      const isTimeout = error.message?.includes('timeout') || error.message?.includes('ETIMEDOUT');
+      if (isRateLimit || isTimeout) {
+        logger.warn(`NBA API request failed (attempt ${attempt}/${NBA_API_MAX_RETRIES}): ${context}`, { error: error.message, retrying: true });
+        if (attempt < NBA_API_MAX_RETRIES) {
+          await new Promise(resolve => setTimeout(resolve, NBA_API_RETRY_DELAY * attempt));
+        }
+      } else {
+        throw error;
+      }
+    }
+  }
+  throw lastError;
+}
 
 let config: EnvConfig;
 try {
@@ -67,7 +133,7 @@ const authLimiter = rateLimit({
   message: { error: "Too many authentication attempts, please try again later." },
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(errorTrackingMiddleware);
 
 process.on('uncaughtException', (error) => {
@@ -260,22 +326,22 @@ app.post("/api/auth/signup", authLimiter, async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ error: "Email and password are required" });
+      return res.status(400).json(createErrorResponse("Email and password are required", 'VALIDATION_ERROR'));
     }
 
     if (!isValidEmail(email)) {
-      return res.status(400).json({ error: "Invalid email format" });
+      return res.status(400).json(createErrorResponse("Invalid email format", 'VALIDATION_ERROR'));
     }
 
     if (password.length < 8) {
-      return res.status(400).json({ error: "Password must be at least 8 characters" });
+      return res.status(400).json(createErrorResponse("Password must be at least 8 characters", 'VALIDATION_ERROR'));
     }
 
     const normalizedEmail = email.toLowerCase().trim();
 
     const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(normalizedEmail);
     if (existing) {
-      return res.status(409).json({ error: "Email already registered", message: "An account with this email already exists" });
+      return res.status(409).json(createErrorResponse("Email already registered", 'DUPLICATE_ERROR'));
     }
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
@@ -307,7 +373,7 @@ app.post("/api/auth/signup", authLimiter, async (req, res) => {
     });
   } catch (err: any) {
     logger.error("Signup error", { error: err.message });
-    res.status(500).json({ error: "Failed to create account" });
+    res.status(500).json(createErrorResponse("Failed to create account", 'AUTH_ERROR'));
   }
 });
 
@@ -324,19 +390,19 @@ app.post("/api/auth/login", authLimiter, async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ error: "Email and password are required" });
+      return res.status(400).json(createErrorResponse("Email and password are required", 'VALIDATION_ERROR'));
     }
 
     const normalizedEmail = email.toLowerCase().trim();
     const user = db.prepare("SELECT * FROM users WHERE email = ?").get(normalizedEmail) as any;
 
     if (!user) {
-      return res.status(401).json({ error: "Invalid credentials", message: "Email or password is incorrect" });
+      return res.status(401).json(createErrorResponse("Invalid credentials", 'AUTH_ERROR'));
     }
 
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
     if (!passwordMatch) {
-      return res.status(401).json({ error: "Invalid credentials", message: "Email or password is incorrect" });
+      return res.status(401).json(createErrorResponse("Invalid credentials", 'AUTH_ERROR'));
     }
 
     const isFirstLogin = !user.first_login_at;
@@ -364,7 +430,7 @@ app.post("/api/auth/login", authLimiter, async (req, res) => {
     });
   } catch (err: any) {
     logger.error("Login error", { error: err.message });
-    res.status(500).json({ error: "Failed to login" });
+    res.status(500).json(createErrorResponse("Failed to login", 'AUTH_ERROR'));
   }
 });
 
@@ -740,6 +806,69 @@ app.get("/api/analytics/paper-trades", (req, res) => {
 });
 
 /**
+ * @route GET /api/analytics/referrals
+ * @description Get referral statistics since a given date
+ * @query {string} [since] - ISO date string (defaults to 30 days ago)
+ * @returns {Object} Referral stats including total referrals and conversion rate
+ */
+app.get("/api/analytics/referrals", (req, res) => {
+  const since = (req.query.since as string) || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  try {
+    const stats = getReferralStats(since);
+    res.json({ since, ...stats });
+  } catch (err: any) {
+    logger.error("Referrals query error", { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * @route GET /api/analytics/dashboard
+ * @description Get aggregated launch metrics dashboard data
+ * @query {string} [since] - ISO date string (defaults to 30 days ago)
+ * @returns {Object} Dashboard metrics including signups, referrals, DAU, predictions, and funnel data
+ */
+app.get("/api/analytics/dashboard", (req, res) => {
+  const since = (req.query.since as string) || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const today = new Date().toISOString().split('T')[0];
+  try {
+    const dau = getDailyActiveUsers(today);
+    const signups = getSignupsSince(since);
+    const paperTrades = getPaperTradesCount(since);
+    const referralStats = getReferralStats(since);
+    const funnel = getConversionFunnel(since);
+    const waitlistRate = getWaitlistToSignupRate();
+
+    res.json({
+      period: { since, today },
+      metrics: {
+        daily_active_users: dau,
+        signups,
+        paper_trades: paperTrades,
+        referrals: referralStats.totalReferrals,
+        referral_conversions: referralStats.convertedReferrals,
+        referral_conversion_rate: referralStats.conversionRate
+      },
+      funnel: {
+        waitlist: funnel.waitlist,
+        signups: funnel.signups,
+        predictions: funnel.predictions,
+        referrals: funnel.referrals,
+        conversions: funnel.conversions
+      },
+      waitlist_conversion: {
+        waitlist_count: waitlistRate.waitlistCount,
+        signup_count: waitlistRate.signupCount,
+        conversion_rate: waitlistRate.conversionRate
+      }
+    });
+  } catch (err: any) {
+    logger.error("Dashboard query error", { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * @route POST /api/analytics/track
  * @description Track a user event (signup, login, prediction_viewed, paper_trade_placed, premium_upgrade, premium_cancelled)
  * @requiresAuth JWT token in Authorization header
@@ -871,11 +1000,11 @@ app.post("/api/digest/send", async (req: express.Request, res: express.Response)
     
     const gameDate = req.query.date as string || new Date().toISOString().split('T')[0];
     
-    const gamesRes = await getGames(gameDate);
+    const gamesRes = await withNbaApiRetry(() => getGames(gameDate), 'getGames-digest');
     const games = gamesRes.data;
 
     if (games.length === 0) {
-      return res.status(404).json({ error: "No games scheduled", message: "No games for today" });
+      return res.status(404).json(createErrorResponse("No games scheduled", 'NO_GAMES'));
     }
 
     const teamIds = new Set<number>();
@@ -884,7 +1013,7 @@ app.post("/api/digest/send", async (req: express.Request, res: express.Response)
       teamIds.add(g.visitor_team.id);
     });
 
-    const players = await getTeamRoster([...teamIds]);
+    const players = await withNbaApiRetry(() => getTeamRoster([...teamIds]), 'getTeamRoster-digest');
     const playersWithPosition = players.filter((p: any) => p.position);
 
     const seasonAverages = new Map<number, BDLSeasonAverage>();
@@ -892,7 +1021,7 @@ app.post("/api/digest/send", async (req: express.Request, res: express.Response)
 
     for (let i = 0; i < fetchLimit; i++) {
       try {
-        const avg = await getSeasonAverages(playersWithPosition[i].id);
+        const avg = await withNbaApiRetry(() => getSeasonAverages(playersWithPosition[i].id), `getSeasonAverages-digest-${playersWithPosition[i].id}`);
         if (avg) seasonAverages.set(playersWithPosition[i].id, avg);
         if (i % 5 === 4) await new Promise((r: any) => setTimeout(r, 200));
       } catch (e: any) {
@@ -903,12 +1032,12 @@ app.post("/api/digest/send", async (req: express.Request, res: express.Response)
     const result = generatePredictions(playersWithPosition, seasonAverages, gameDate);
     const topPredictions = result.topPlayers;
 
-    const yesterdayRows = db.prepare(`
+    const yesterdayRows = await withDatabaseRetry(() => db.prepare(`
       SELECT AVG(ABS(actual_pts - predicted_pts)) as pts_mae,
              AVG(ABS(actual_reb - predicted_reb)) as reb_mae,
              AVG(ABS(actual_ast - predicted_ast)) as ast_mae
       FROM predictions WHERE game_date = ? AND actual_pts IS NOT NULL
-    `).get(yesterdayStr) as any;
+    `).get(yesterdayStr) as any, 'getYesterdayAccuracy');
 
     const yesterdayAccuracy = yesterdayRows ? {
       ptsMAE: yesterdayRows.pts_mae,
@@ -921,7 +1050,7 @@ app.post("/api/digest/send", async (req: express.Request, res: express.Response)
     res.json({ success: true, digestSent: sent, digestFailed: failed });
   } catch (err: any) {
     logger.error("Send digest error", { error: err.message });
-    res.status(500).json({ error: "Failed to send digest" });
+    res.status(500).json(createErrorResponse("Failed to send digest", 'DIGEST_ERROR'));
   }
 });
 
@@ -935,15 +1064,13 @@ app.post("/api/digest/send", async (req: express.Request, res: express.Response)
 app.get("/api/predictions", async (req, res) => {
   const gameDate = (req.query.date as string) || new Date().toISOString().split("T")[0];
   try {
-    // Return cache if fresh
     if (predictionCache && Date.now() - predictionCache.timestamp < CACHE_TTL) {
       return res.json(predictionCache.data);
     }
 
     logger.info(`Fetching predictions for ${gameDate}...`);
 
-    // 1. Get today's games
-    const gamesRes = await getGames(gameDate);
+    const gamesRes = await withNbaApiRetry(() => getGames(gameDate), 'getGames');
     const games = gamesRes.data;
 
     if (games.length === 0) {
@@ -951,38 +1078,31 @@ app.get("/api/predictions", async (req, res) => {
       return res.json(data);
     }
 
-    // 2. Get unique team IDs
     const teamIds = new Set<number>();
     games.forEach((g) => {
       teamIds.add(g.home_team.id);
       teamIds.add(g.visitor_team.id);
     });
 
-    // 3. Fetch team rosters
-    const players = await getTeamRoster([...teamIds]);
+    const players = await withNbaApiRetry(() => getTeamRoster([...teamIds]), 'getTeamRoster');
     logger.debug(`Fetched ${players.length} players from ${teamIds.size} teams`);
 
-    // 4. Get season averages for top players (limit to avoid rate limiting)
     const seasonAverages = new Map<number, BDLSeasonAverage>();
-    const playersToFetch = players.filter((p) => p.position); // Only active/rostered players
+    const playersToFetch = players.filter((p) => p.position);
 
-    // Batch fetch - limit to avoid API rate limits
     const fetchLimit = Math.min(playersToFetch.length, 80);
     for (let i = 0; i < fetchLimit; i++) {
       try {
-        const avg = await getSeasonAverages(playersToFetch[i].id);
+        const avg = await withNbaApiRetry(() => getSeasonAverages(playersToFetch[i].id), `getSeasonAverages-${playersToFetch[i].id}`);
         if (avg) seasonAverages.set(playersToFetch[i].id, avg);
-        // Small delay to be respectful
         if (i % 5 === 4) await new Promise((r) => setTimeout(r, 200));
       } catch (e: any) {
         logger.warn(`Skipping player ${playersToFetch[i].id} due to error: ${e.message}`);
       }
     }
 
-    // 5. Generate predictions
     const result = generatePredictions(playersToFetch, seasonAverages, gameDate);
 
-    // 6. Save predictions to DB
     const insertPred = db.prepare(`
       INSERT INTO predictions (player_id, game_date, predicted_pts, predicted_reb, predicted_ast, predicted_stl, predicted_blk, predicted_threes, confidence)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -993,16 +1113,18 @@ app.get("/api/predictions", async (req, res) => {
       VALUES (?, ?, ?, ?, ?)
     `);
 
-    const saveTx = db.transaction(() => {
-      for (const pred of result.topPlayers) {
-        const player = playersToFetch.find((p) => p.id === pred.playerId);
-        if (player) {
-          insertPlayer.run(player.id, player.first_name, player.last_name, player.team?.abbreviation || "", player.position || "");
+    await withDatabaseRetry(async () => {
+      const saveTx = db.transaction(() => {
+        for (const pred of result.topPlayers) {
+          const player = playersToFetch.find((p) => p.id === pred.playerId);
+          if (player) {
+            insertPlayer.run(player.id, player.first_name, player.last_name, player.team?.abbreviation || "", player.position || "");
+          }
+          insertPred.run(pred.playerId, gameDate, pred.predictedPts, pred.predictedReb, pred.predictedAst, pred.predictedStl, pred.predictedBlk, pred.predictedThrees, pred.confidence);
         }
-        insertPred.run(pred.playerId, gameDate, pred.predictedPts, pred.predictedReb, pred.predictedAst, pred.predictedStl, pred.predictedBlk, pred.predictedThrees, pred.confidence);
-      }
-    });
-    saveTx();
+      });
+      saveTx();
+    }, 'savePredictions');
 
     const responseData = {
       gameDate,
@@ -1026,7 +1148,7 @@ app.get("/api/predictions", async (req, res) => {
     res.json(responseData);
   } catch (err: any) {
     logger.error("Prediction error", { error: err.message, gameDate });
-    res.status(500).json({ error: err.message });
+    res.status(500).json(createErrorResponse(err.message, 'PREDICTION_ERROR'));
   }
 });
 
@@ -1336,32 +1458,28 @@ app.get("/api/best-bets", async (req, res) => {
     const gameDate = (req.query.date as string) || new Date().toISOString().split("T")[0];
     const minEdge = parseFloat(req.query.minEdge as string) || 0.15;
 
-    // Get today's games
-    const gamesRes = await getGames(gameDate);
+    const gamesRes = await withNbaApiRetry(() => getGames(gameDate), 'getGames-bestBets');
     const games = gamesRes.data;
 
     if (games.length === 0) {
       return res.json({ gameDate, bestBets: [], message: "No games scheduled" });
     }
 
-    // Get unique team IDs
     const teamIds = new Set<number>();
     games.forEach((g) => {
       teamIds.add(g.home_team.id);
       teamIds.add(g.visitor_team.id);
     });
 
-    // Fetch team rosters
-    const players = await getTeamRoster([...teamIds]);
+    const players = await withNbaApiRetry(() => getTeamRoster([...teamIds]), 'getTeamRoster-bestBets');
     const playersWithPosition = players.filter((p) => p.position);
 
-    // Get season averages (limit to avoid rate limits)
     const seasonAverages = new Map<number, BDLSeasonAverage>();
     const fetchLimit = Math.min(playersWithPosition.length, 50);
 
     for (let i = 0; i < fetchLimit; i++) {
       try {
-        const avg = await getSeasonAverages(playersWithPosition[i].id);
+        const avg = await withNbaApiRetry(() => getSeasonAverages(playersWithPosition[i].id), `getSeasonAverages-bestBets-${playersWithPosition[i].id}`);
         if (avg) seasonAverages.set(playersWithPosition[i].id, avg);
         if (i % 5 === 4) await new Promise((r) => setTimeout(r, 200));
       } catch (e: any) {
@@ -1369,10 +1487,8 @@ app.get("/api/best-bets", async (req, res) => {
       }
     }
 
-    // Generate predictions with distributions
     const result = generatePredictions(playersWithPosition, seasonAverages, gameDate, true);
 
-    // Collect all best bets
     const allBestBets: any[] = [];
     for (const pred of result.topPlayers) {
       if (pred.bestBets && pred.bestBets.length > 0) {
@@ -1388,7 +1504,6 @@ app.get("/api/best-bets", async (req, res) => {
       }
     }
 
-    // Sort by edge
     allBestBets.sort((a, b) => b.edge - a.edge);
 
     res.json({
@@ -1399,7 +1514,7 @@ app.get("/api/best-bets", async (req, res) => {
     });
   } catch (err: any) {
     logger.error("Best bets error", { error: err.message });
-    res.status(500).json({ error: "Failed to generate best bets" });
+    res.status(500).json(createErrorResponse("Failed to generate best bets", 'BEST_BETS_ERROR'));
   }
 });
 
@@ -1413,7 +1528,8 @@ app.post("/api/ingest/today", async (_req, res) => {
     const result = await ingestToday();
     res.json({ success: true, ...result });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    logger.error("Ingest today error", { error: err.message });
+    res.status(500).json(createErrorResponse(err.message, 'INGEST_ERROR'));
   }
 });
 
@@ -1429,7 +1545,8 @@ app.post("/api/ingest/players", async (req, res) => {
     const count = await ingestPlayers(pageLimit);
     res.json({ success: true, playersIngested: count });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    logger.error("Ingest players error", { error: err.message });
+    res.status(500).json(createErrorResponse(err.message, 'INGEST_ERROR'));
   }
 });
 
@@ -1445,7 +1562,8 @@ app.post("/api/ingest/stats", async (req, res) => {
     const count = await ingestHistoricalStats(dates);
     res.json({ success: true, statsIngested: count, dates });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    logger.error("Ingest stats error", { error: err.message });
+    res.status(500).json(createErrorResponse(err.message, 'INGEST_ERROR'));
   }
 });
 
@@ -1501,6 +1619,121 @@ app.get("/api/paper-trading/stats", (_req, res) => {
 });
 
 /**
+ * @route GET /api/paper-trading/stats/filtered
+ * @description Get filtered paper trading statistics
+ * @query {string} [team] - Filter by team abbreviation
+ * @query {string} [statType] - Filter by stat type (pts, reb, ast)
+ * @query {string} [startDate] - Start date filter (YYYY-MM-DD)
+ * @query {string} [endDate] - End date filter (YYYY-MM-DD)
+ * @returns {Object} Filtered bet stats including win rate, ROI, and totals
+ */
+app.get("/api/paper-trading/stats/filtered", (req, res) => {
+  try {
+    const filters = {
+      teamAbbrev: req.query.team as string,
+      statType: req.query.statType as string,
+      startDate: req.query.startDate as string,
+      endDate: req.query.endDate as string,
+    };
+    const stats = getFilteredBetStats(filters);
+    res.json(stats);
+  } catch (err: any) {
+    logger.error("Get filtered bet stats error", { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * @route GET /api/paper-trading/roi-breakdown
+ * @description Get ROI breakdown by different groupings
+ * @query {string} [groupBy=stat_type] - Grouping field (stat_type, team_abbrev, over_or_under, month)
+ * @returns {Object} ROI breakdown including groups with win rate, P&L, and ROI
+ */
+app.get("/api/paper-trading/roi-breakdown", (req, res) => {
+  try {
+    const groupBy = (req.query.groupBy as 'stat_type' | 'team_abbrev' | 'over_or_under' | 'month') || 'stat_type';
+    const breakdown = getROIBreakdown(groupBy);
+    res.json(breakdown);
+  } catch (err: any) {
+    logger.error("Get ROI breakdown error", { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * @route GET /api/paper-trading/roi-summary
+ * @description Get comprehensive ROI summary with all breakdowns
+ * @returns {Object} ROI summary with breakdowns by stat type, team, and bet type
+ */
+app.get("/api/paper-trading/roi-summary", (req, res) => {
+  try {
+    const overall = getBetStats();
+    const byStatType = getROIBreakdown('stat_type');
+    const byTeam = getROIBreakdown('team_abbrev');
+    const byBetType = getROIBreakdown('over_or_under');
+    
+    res.json({
+      overall,
+      byStatType: byStatType.groups,
+      byTeam: byTeam.groups,
+      byBetType: byBetType.groups,
+    });
+  } catch (err: any) {
+    logger.error("Get ROI summary error", { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * @route GET /api/paper-trading/platform-accuracy
+ * @description Get platform's overall prediction accuracy for comparison
+ * @query {string} [days=30] - Number of days to look back
+ * @returns {Object} Platform accuracy with MAE by stat type
+ */
+app.get("/api/paper-trading/platform-accuracy", (req, res) => {
+  try {
+    const days = parseInt(req.query.days as string) || 30;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    const startDateStr = startDate.toISOString().split('T')[0];
+
+    const db = getDb();
+    
+    const stats = db.prepare(`
+      SELECT 
+        stat_type,
+        COUNT(*) as total_predictions,
+        AVG(ABS(actual_pts - predicted_pts)) as pts_mae,
+        AVG(ABS(actual_reb - predicted_reb)) as reb_mae,
+        AVG(ABS(actual_ast - predicted_ast)) as ast_mae,
+        SUM(CASE WHEN actual_pts IS NOT NULL THEN 1 ELSE 0 END) as scored_count
+      FROM predictions
+      WHERE DATE(game_date) >= DATE(?)
+      GROUP BY stat_type
+    `).all(startDateStr) as any[];
+
+    const accuracy = {
+      period_days: days,
+      start_date: startDateStr,
+      end_date: new Date().toISOString().split('T')[0],
+      by_stat_type: stats.map(s => ({
+        stat_type: s.stat_type,
+        total_predictions: s.total_predictions,
+        scored_predictions: s.scored_count,
+        pts_mae: s.pts_mae ? Math.round(s.pts_mae * 1000) / 1000 : null,
+        reb_mae: s.reb_mae ? Math.round(s.reb_mae * 1000) / 1000 : null,
+        ast_mae: s.ast_mae ? Math.round(s.ast_mae * 1000) / 1000 : null,
+      })),
+    };
+
+    res.json(accuracy);
+  } catch (err: any) {
+    logger.error("Get platform accuracy error", { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * @route GET /api/paper-trading/bets/open
  * @description Get all open (unsettled) paper bets
  * @returns {Array} Array of open bet objects
@@ -1517,14 +1750,30 @@ app.get("/api/paper-trading/bets/open", (_req, res) => {
 
 /**
  * @route GET /api/paper-trading/bets/history
- * @description Get paper betting history
+ * @description Get paper betting history with optional filtering
  * @query {number} [limit=50] - Maximum number of bets to return
+ * @query {string} [team] - Filter by team abbreviation
+ * @query {string} [statType] - Filter by stat type (pts, reb, ast)
+ * @query {string} [startDate] - Start date filter (YYYY-MM-DD)
+ * @query {string} [endDate] - End date filter (YYYY-MM-DD)
  * @returns {Array} Array of historical bet objects
  */
 app.get("/api/paper-trading/bets/history", (req, res) => {
   try {
     const limit = parseInt(req.query.limit as string) || 50;
-    const bets = getBetHistory(limit);
+    const filters = {
+      teamAbbrev: req.query.team as string,
+      statType: req.query.statType as string,
+      startDate: req.query.startDate as string,
+      endDate: req.query.endDate as string,
+    };
+    
+    let bets;
+    if (filters.teamAbbrev || filters.statType || filters.startDate || filters.endDate) {
+      bets = getFilteredBetHistory(limit, filters);
+    } else {
+      bets = getBetHistory(limit);
+    }
     res.json(bets);
   } catch (err: any) {
     logger.error("Get bet history error", { error: err.message });
@@ -1666,7 +1915,7 @@ app.post("/api/paper-trading/simulate", async (req, res) => {
     const minEdge = parseFloat(req.body.minEdge as string) || 0.15;
     const maxBets = parseInt(req.body.maxBets as string) || 10;
 
-    const gamesRes = await getGames(gameDate);
+    const gamesRes = await withNbaApiRetry(() => getGames(gameDate), 'getGames-simulate');
     const games = gamesRes.data;
 
     if (games.length === 0) {
@@ -1679,7 +1928,7 @@ app.post("/api/paper-trading/simulate", async (req, res) => {
       teamIds.add(g.visitor_team.id);
     });
 
-    const players = await getTeamRoster([...teamIds]);
+    const players = await withNbaApiRetry(() => getTeamRoster([...teamIds]), 'getTeamRoster-simulate');
     const playersWithPosition = players.filter((p) => p.position);
 
     const seasonAverages = new Map<number, BDLSeasonAverage>();
@@ -1687,7 +1936,7 @@ app.post("/api/paper-trading/simulate", async (req, res) => {
 
     for (let i = 0; i < fetchLimit; i++) {
       try {
-        const avg = await getSeasonAverages(playersWithPosition[i].id);
+        const avg = await withNbaApiRetry(() => getSeasonAverages(playersWithPosition[i].id), `getSeasonAverages-simulate-${playersWithPosition[i].id}`);
         if (avg) seasonAverages.set(playersWithPosition[i].id, avg);
         if (i % 5 === 4) await new Promise((r) => setTimeout(r, 200));
       } catch (e: any) {
@@ -1746,7 +1995,7 @@ app.post("/api/paper-trading/simulate", async (req, res) => {
     });
   } catch (err: any) {
     logger.error("Paper trading simulate error", { error: err.message });
-    res.status(500).json({ error: err.message });
+    res.status(500).json(createErrorResponse(err.message, 'SIMULATE_ERROR'));
   }
 });
 
@@ -1754,23 +2003,28 @@ app.post("/api/paper-trading/simulate", async (req, res) => {
 interface ApiError extends Error {
   statusCode?: number;
   expose?: boolean;
+  code?: string;
 }
 
 app.use((err: ApiError, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const statusCode = err.statusCode || 500;
-  const message = statusCode >= 500 && !err.expose ? 'Internal server error' : err.message;
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  const errorResponse = createErrorResponse(
+    statusCode >= 500 && !err.expose ? 'Internal server error' : err.message,
+    err.code || (statusCode >= 500 ? 'INTERNAL_ERROR' : 'REQUEST_ERROR'),
+    isProduction ? undefined : { stack: err.stack }
+  );
   
   logger.error('Unhandled error', { 
     error: err.message, 
     stack: err.stack, 
     path: (_req as any).path,
-    method: (_req as any).method 
+    method: (_req as any).method,
+    statusCode 
   });
   
-  res.status(statusCode).json({ 
-    error: message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
+  res.status(statusCode).json(errorResponse);
 });
 
 // SPA fallback

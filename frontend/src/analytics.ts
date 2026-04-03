@@ -111,4 +111,19 @@ export function captureFirstPredictionViewed(userId: number, playerId: number, p
   });
 }
 
+export function captureReferralSignup(referrerId: number, refereeId: number, source: string = 'referral_code') {
+  posthog.capture('referral_signup', {
+    referrer_id: referrerId,
+    referee_id: refereeId,
+    source,
+  });
+}
+
+export function captureReferralConverted(referrerId: number, refereeId: number) {
+  posthog.capture('referral_converted', {
+    referrer_id: referrerId,
+    referee_id: refereeId,
+  });
+}
+
 export { posthog };

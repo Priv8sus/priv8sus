@@ -274,6 +274,173 @@ Happy to jump on a call if you want to chat about it.
 
 ---
 
+## Additional Influencer Targets (Part 2)
+
+### YouTube Targets
+
+#### 4. Pickswise (~$50k sponsorship value)
+**YouTube Channel:** Sports betting education and picks
+**DM Template:**
+```
+Hey [Name],
+
+Your sports betting education content fills a gap that most "picks" channels don't. The analytical approach is what the industry needs more of.
+
+I work with Priv8sus — a privacy-first prediction market. Your audience would appreciate our angle: no data harvesting, your predictions stay yours.
+
+Would love to explore:
+- Early access for your community
+- Potential collaboration on content
+- Affiliate partnership
+
+Interested in chatting?
+```
+
+#### 5. The Props Player (~$12k sponsorship value)
+**YouTube Channel:** NBA player prop analysis
+**DM Template:**
+```
+Hey [Name],
+
+Your player prop breakdowns are what I watch before making picks. The matchup analysis is next level.
+
+I work with Priv8sus — we're a privacy-first sports betting prediction platform. Your NBA player prop audience is exactly who we built for.
+
+Not looking for a hard sell. Would genuinely appreciate your take on what we built, and happy to comp premium access.
+
+Open to chatting?
+```
+
+#### 6. Big MLB Money (~$15k sponsorship value)
+**YouTube Channel:** MLB predictions and analysis
+**DM Template:**
+```
+Hey [Name],
+
+Your baseball betting content cuts through the noise. The way you break down MLB predictions is exactly the kind of analysis serious bettors need.
+
+Quick intro: I work with Priv8sus — a privacy-first prediction market. We don't harvest your betting data or sell predictions to brokers.
+
+Your audience would appreciate our privacy-first approach. Would love to give you early access and hear your honest take.
+
+Interested?
+```
+
+### Reddit Targets
+
+#### 4. u/ProfitablePicks
+**Reddit Community:** r/sportsbook, r/nbapicks
+**DM Template:**
+```
+Hey! Your tracking posts showing ROI are what drew me to reach out.
+
+I work with Priv8sus — a privacy-first prediction market. Your discipline in tracking results aligns with how we think about the product.
+
+Would love to get your perspective on what we built. Happy to comp premium access for your honest feedback.
+
+Interested?
+```
+
+#### 5. u/DataDrivenBettor
+**Reddit Community:** r/sportsbetting, r/dfs
+**DM Template:**
+```
+Hey — your posts on expected value and model-building are solid.
+
+I work with Priv8sus. We're a prediction market built on privacy — your betting data stays YOURS, not sold to brokers.
+
+Your data-driven approach is exactly who we're targeting. Would be great to get your take on what we made.
+
+Interested in early access?
+```
+
+#### 6. u/TheSharpBook
+**Reddit Community:** r/sportsbook
+**DM Template:**
+```
+Hey! Your unit tracking and bankroll management posts are what I read first.
+
+I work with Priv8sus — privacy-first prediction market. Your community would appreciate what we're doing: no data harvesting, your edge stays yours.
+
+Would love to give you early access and hear your perspective.
+
+Open to chatting?
+```
+
+### Twitter/X Targets
+
+#### 3. @NBABettingTip
+**Followers:** ~45k
+**DM Template:**
+```
+Hey! Your NBA betting picks with analysis are what I check daily.
+
+I work with Priv8sus — we're a privacy-first prediction market where your betting data doesn't get sold to brokers.
+
+Your audience would actually care about this — it's a real differentiator, not marketing fluff.
+
+Not looking for a hard sell. Would genuinely love to get your take on what we built.
+
+Interested in early access?
+```
+
+#### 4. @ParlayProNBA
+**Followers:** ~30k
+**DM Template:**
+```
+Hey — your parlay analysis and picks are solid work.
+
+I work with Priv8sus — privacy-first sports betting predictions. Your NBA parlay audience is exactly who we built for.
+
+Would love to give you access and hear your honest take. No strings.
+
+Open to chatting?
+```
+
+#### 5. @LockedInPicks
+**Followers:** ~60k
+**DM Template:**
+```
+Hey! Your betting picks with real analysis stand out from the noise.
+
+I work with Priv8sus — a privacy-first prediction market. Your audience would appreciate what we're doing: keeping your predictions yours.
+
+Not looking for a promo — genuinely think you'd have useful feedback on the product.
+
+Interested in early access?
+```
+
+#### 6. @FadeThePublicPod
+**Podcast/Twitter:** Sports betting podcast
+**DM Template:**
+```
+Hey! Your podcast cuts through the sports betting noise with real analysis.
+
+I work with Priv8sus — we're a privacy-first prediction market. Your audience of serious bettors would appreciate what we're building.
+
+Would love to explore:
+- Podcast guest appearance
+- Early access for your community
+- Honest feedback on the product
+
+Interested?
+```
+
+### TikTok Targets
+
+#### 1. @BettingWithB大家 (~$20k sponsorship value)
+**TikTok:** Sports betting education
+**DM Template:**
+```
+Hey! Your sports betting education content has built a serious community.
+
+I work with Priv8sus — privacy-first NBA predictions. Your audience would appreciate what we're doing differently.
+
+Not looking for a hard sell. Would genuinely love to give you early access and hear your take.
+
+Open to chatting?
+```
+
 ## Key Messaging Points
 
 - **Core differentiator:** Privacy-first. Your predictions stay yours.

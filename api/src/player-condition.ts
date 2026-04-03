@@ -1,5 +1,6 @@
 import fetch from "node-fetch";
 import { getDb } from "./db.js";
+import { logger } from "./logging.js";
 
 const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
 
@@ -422,7 +423,7 @@ export async function scrapePlayerConditions(gameDate?: string): Promise<{
 }> {
   const date = gameDate || new Date().toISOString().split("T")[0];
 
-  console.log(`Scraping player conditions for ${date}...`);
+  logger.info(`Scraping player conditions for ${date}...`);
 
   const [injuryTeams, newsArticles] = await Promise.all([
     scrapeEspnInjuries(),
@@ -430,7 +431,7 @@ export async function scrapePlayerConditions(gameDate?: string): Promise<{
   ]);
 
   const totalInjuries = injuryTeams.reduce((sum, t) => sum + t.injuries.length, 0);
-  console.log(
+  logger.info(
     `Found ${totalInjuries} injuries across ${injuryTeams.length} teams, ${newsArticles.length} news articles`
   );
 

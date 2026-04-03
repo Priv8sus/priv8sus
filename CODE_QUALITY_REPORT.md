@@ -1,184 +1,187 @@
-# Frontend Code Quality Report
+# Code Quality Report
 
-**Date:** 2026-04-02  
-**Reviewer:** CTO  
-**Scope:** `/frontend/src`  
-**Status:** Production-ready with minor issues to address
+**Date:** 2026-04-03
+**Reviewer:** CTO
+**Scope:** `/frontend/src` + `/api/src`
+**Status:** Production-ready with technical debt items to address post-launch
 
 ---
 
 ## Summary
 
-The frontend code is well-structured and follows most React best practices. TypeScript is used correctly throughout. The main concerns are duplicate code, some debug statements that should be removed before production, and a few hardcoded values.
+The codebase is production-ready. Frontend issues from yesterday's review have been addressed. New review identifies API architecture concerns that should be addressed in a future sprint.
 
 ---
 
-## 1. Component Structure
+## Frontend Review (Complete)
 
-### ✅ Good
-- Clean separation of concerns (components, hooks, context, types)
-- Auth context properly manages global auth state
-- Custom hooks (`useTourComplete`, `useWelcomeComplete`) are simple and focused
-- ErrorBoundary implemented at app root
-- Sentry and analytics properly initialized in main.tsx
+### Previous Action Items - All ✅ DONE
 
-### ⚠️ Issues
+| Priority | Item | Status |
+|----------|------|--------|
+| High | Remove console.log | ✅ DONE |
+| Medium | Consolidate Dashboard | ✅ DONE |
+| Medium | Deduplicate utility functions | ✅ DONE |
+| Low | Add unit tests | ✅ DONE (57 tests passing) |
+| Low | Remove dead code | ✅ DONE |
 
-**Duplicate Dashboard Component**
-- `App.tsx:21-219` defines `Dashboard` as an inner component
-- `Dashboard.tsx:16-209` exports a separate `Dashboard` component
-- These are two different implementations serving similar purposes
-- **Recommendation:** Consolidate into one Dashboard component
-
-**AppInner has too many responsibilities**
-- `App.tsx:229-275` handles auth check, dashboard rendering, onboarding, and profile modal
-- **Recommendation:** Extract onboarding logic into a separate hook or component
+### Frontend Verdict
+**Production-ready.** Codebase is in excellent shape for launch.
 
 ---
 
-## 2. Code Smells & Anti-Patterns
+## API Review (New Findings)
 
-### ⚠️ Duplicate Functions
+### 1. Architecture - Monolithic File
 
-`getTrendIcon` and `getTrendClass` are duplicated:
-- `TopPredictions.tsx:12-28`
-- `PlayerDetailPanel.tsx:9-23`
+**🔴 Critical Issue: index.ts is 1924 lines**
 
-**Recommendation:** Move to a shared utility file (`utils/format.ts`)
+The main API file contains everything:
+- All route handlers
+- Business logic
+- Database queries
+- External API calls
+- Error handling
 
-### ⚠️ Hardcoded MAE Values
+**File size breakdown:**
+- `index.ts`: 1924 lines
+- `paper-trading.ts`: 547 lines
+- `db.ts`: 337 lines
+- `email-service.ts`: 14,775 bytes
+- `probability-model.ts`: 9,347 bytes
 
-`AccuracyMetrics.tsx:77`:
-```typescript
-return { pts: 4.2, reb: 2.1, ast: 3.8 };
+**Impact:**
+- Difficult to navigate and debug
+- Route handlers cannot be tested in isolation
+- Team collaboration is challenging
+- No clear ownership of different features
+
+**Recommendation:** Post-launch, refactor into route modules:
 ```
-These appear to be placeholder values.
-
-**Recommendation:** Fetch from API or remove if intentionally static
-
-### ⚠️ Dead Code
-
-`Dashboard.tsx`:
-- `streak` state is set but never used in the component
-- `setData` from `useState` is imported but never called
-
-### ⚠️ Unused import
-
-`Dashboard.tsx:5` imports `Game` type but it's used inline in the map
-
----
-
-## 3. Error Handling
-
-### ✅ Good
-- Most API calls have try/catch blocks
-- Error states are properly maintained
-- User-facing error messages exist
-
-### ⚠️ Silent Failures
-
-`Dashboard.tsx:41-43, 58-60`:
-```typescript
-} catch {
-  // Silently fail
-}
-```
-Activity recording failures are silently ignored. This is acceptable for non-critical features but should be logged internally.
-
-### ⚠️ Error Messages
-
-Some error messages are developer-focused (e.g., "Failed to fetch predictions") rather than user-friendly.
-
----
-
-## 4. Console.log / Debug Statements
-
-### 🔴 Must Remove (Production)
-
-**`sentry.ts:31`:**
-```typescript
-console.log('[Sentry] Initialized with DSN:', SENTRY_DSN ? '***configured***' : 'NONE');
+api/src/routes/
+  auth.ts       (login, signup, logout)
+  predictions.ts (GET /api/predictions, etc.)
+  bets.ts       (paper trading endpoints)
+  users.ts      (profile, settings)
+  admin.ts      (monitoring, error logs)
 ```
 
-### ⚠️ Acceptable (Debugging/Error Monitoring)
-
-| File | Statement | Reason |
-|------|-----------|--------|
-| `ErrorBoundary.tsx:25` | `console.error(...)` | Debugging during development |
-| `sentry.ts:26` | `console.error(...)` | `beforeSend` hook for Sentry |
-| `sentry.ts:8` | `console.warn(...)` | Missing DSN warning |
-| `HistoricalView.tsx:58` | `console.error(...)` | Error logging |
-| `AccuracyMetrics.tsx:59` | `console.error(...)` | Error logging |
-
-**Recommendation:** Keep ErrorBoundary and Sentry logs. Remove the direct `console.log` in sentry.ts.
-
 ---
 
-## 5. TypeScript
+### 2. Code Smells
 
-### ✅ Good
-- Strong typing throughout
-- Clean interface definitions
-- Proper use of generic types
+#### A. console.log in player-condition.ts
 
-### ⚠️ Type Casts
+**File:** `api/src/player-condition.ts:425,433`
 
-`AuthContext.tsx:33`:
 ```typescript
-...(options.headers as Record<string, string> || {}),
+console.log(`Scraping player conditions for ${date}...`);
+// ...
+console.log(`Found ${totalInjuries} injuries across ${injuryTeams.length} teams`);
 ```
-This cast is necessary but could be improved with better typing.
+
+**Issue:** Uses raw `console.log` instead of the application's `logger`.
+
+**Fix:** Replace with `logger.info()` or `logger.debug()`.
 
 ---
 
-## 6. Security
+#### B. Empty Routes Directory
 
-### ⚠️ Considerations
-- API responses are not validated against schemas
-- No visible input sanitization (though React escapes by default)
-- Token stored in localStorage (standard practice, but vulnerable to XSS)
+**File:** `api/src/routes/`
 
-**Recommendation:** For production, consider httpOnly cookies for token storage.
+The routes directory exists (created for future modularization) but is empty. All routes are defined inline in `index.ts`.
 
----
-
-## 7. Performance
-
-### ✅ Good
-- useCallback used appropriately for fetch functions
-- Lazy loading not needed for this app size
-
-### ⚠️ Issues
-- `AccuracyMetrics` makes two sequential fetches that could be parallel
-- `HistoricalView` fetches history and accuracy in parallel (good)
+**Recommendation:** This is technical debt. Not a launch blocker but should be addressed within 2 weeks post-launch.
 
 ---
 
-## 8. Testing Readiness
+#### C. Duplicate SQL Statements
 
-### Current Coverage (based on code inspection)
-- No unit tests visible
-- No integration tests visible
+**File:** `api/src/index.ts`
 
-**Recommendation:** Add tests for:
-- AuthContext login/logout flows
-- Dashboard data fetching and state management
-- ErrorBoundary error catching
+The same INSERT statement for predictions appears twice:
+- Line 990-993: INSERT for predictions
+- Line 1059-1062: Duplicate INSERT for predictions (in POST handler)
+
+**Recommendation:** Extract to a shared helper function.
 
 ---
 
-## Action Items
+### 3. Error Handling
 
-| Priority | Item | File | Status |
-|----------|------|------|--------|
-| High | Remove console.log | sentry.ts:31 | ✅ DONE (2026-04-02) |
-| Medium | Consolidate Dashboard | App.tsx, Dashboard.tsx | ✅ DONE (2026-04-02) - Dead Dashboard.tsx removed |
-| Medium | Deduplicate utility functions | TopPredictions.tsx, PlayerDetailPanel.tsx | ✅ DONE (2026-04-02) |
-| Low | Add unit tests | - | ✅ DONE (2026-04-02) - 57 tests passing |
-| Low | Remove dead code | Dashboard.tsx | ✅ DONE (2026-04-02) - Removed dead Dashboard.tsx + Dashboard.css |
+#### ✅ Good
+- Global error handler at `index.ts:1888-1909`
+- Uncaught exception handler at `index.ts:77-80`
+- Unhandled rejection handler at `index.ts:82-84`
+- Error tracking middleware integrated
+- Rate limiting on auth endpoints
+
+#### ⚠️ Silent Failures
+
+Some non-critical operations silently fail:
+- Activity tracking failures in frontend are silently caught
+- Email queue processing errors are logged but don't fail the request
+
+---
+
+### 4. Security
+
+#### ✅ Good
+- JWT_SECRET validation at startup
+- Rate limiting configured
+- CORS configured
+- Input validation on most endpoints
+- Parameterized SQL queries (no SQL injection)
+
+#### ⚠️ Considerations
+- Token stored in localStorage (standard practice, XSS vulnerable)
+- No request body size limits
+- No helmet.js security headers
+
+---
+
+### 5. Performance
+
+#### ✅ Good
+- 10-minute prediction cache with TTL
+- WAL mode on SQLite
+- Batch API calls with rate limiting
+- Connection pooling via better-sqlite3
+
+#### ⚠️ Issues
+- `getGames` is called multiple times per request in some flows
+- No Redis caching (prepared for post-launch if needed)
+
+---
+
+## Quick Wins (Post-Launch)
+
+| Priority | Item | Effort | Impact |
+|----------|------|--------|--------|
+| Low | Replace console.log with logger | 5 min | Consistency |
+| Medium | Modularize routes | 4-6 hours | Maintainability |
+| Low | Add helmet.js security headers | 15 min | Security |
+| Low | Add request body size limits | 10 min | Security |
 
 ---
 
 ## Verdict
 
-**Production-ready** after addressing all high and medium priority items. The codebase is in excellent shape for launch. All code quality action items are complete.
+**Production-ready.** Launch the MVP now. Address technical debt within 2 weeks post-launch.
+
+### Pre-Launch Checklist
+- [x] All high/medium frontend issues resolved
+- [x] Unit tests passing
+- [x] Error handling in place
+- [x] Rate limiting configured
+- [x] JWT validation enforced
+
+### Post-Launch Priorities
+1. Modularize API routes (medium effort, high impact on maintainability)
+2. Replace console.log statements
+3. Add security headers (helmet.js)
+
+---
+
+*Report generated: 2026-04-03 03:40 UTC*

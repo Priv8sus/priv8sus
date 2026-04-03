@@ -2,7 +2,7 @@
 
 **FOR IMMEDIATE RELEASE**
 
-**Date:** April 2, 2026
+**Date:** April 3, 2026
 
 **Contact:**
 Theo (CEO)
@@ -25,10 +25,13 @@ The sports betting industry has a data problem. Most "free" prediction platforms
 ### Key Features of Priv8Sus
 
 - **Privacy-First Design**: User prediction models and betting data are never sold, shared, or used to power algorithmic trading against users
-- **NBA Launch**: Starting with NBA moneyline, spreads, and parlay predictions
+- **NBA Launch**: Starting with NBA player props (points, rebounds, assists), moneyline, spreads, and parlay predictions
+- **ML Confidence Scores**: Every prediction comes with a confidence rating powered by machine learning models
+- **Paper Trading**: Test prediction strategies risk-free before betting real money
 - **User Ownership**: Users retain full ownership of their prediction models and betting history
 - **No Algorithmic Manipulation**: No hidden algorithms that adjust odds against user predictions
-- **Transparent Markets**: Honest prediction markets where user insights have real value
+- **Referral Program**: Users earn Pro days by referring friends who make their first prediction
+- **Coming Soon**: NFL predictions and additional sports (MLB, NHL)
 
 ### Market Opportunity
 
@@ -43,6 +46,10 @@ The sports betting prediction market has grown significantly, with millions of u
 ### Availability
 
 Priv8Sus is live today at [priv8sus.com](https://priv8sus.com). Users can sign up for free and start making NBA predictions immediately.
+
+**Pricing:**
+- Free tier: 3 NBA picks per day, basic stats, paper trading
+- Pro tier: $9.99/month (50% launch discount for first 50 subscribers) — unlimited picks, advanced ML models, NFL picks access coming soon
 
 ### About Priv8Sus
 
@@ -63,7 +70,8 @@ press@priv8sus.com
 **About Priv8Sus:**
 - Founded: 2026
 - Product: Privacy-first sports prediction market
-- Initial launch: NBA predictions (moneyline, spreads, parlays)
+- Initial launch: NBA player props, moneyline, spreads, parlays with ML confidence scores
+- Coming soon: NFL predictions, MLB, NHL
 - Website: priv8sus.com
 
 **Key Differentiators:**
@@ -71,6 +79,8 @@ press@priv8sus.com
 - No algorithmic manipulation of odds
 - User-owned prediction models
 - Transparent market mechanics
+- Paper trading for risk-free strategy testing
+- Referral program with Pro tier rewards
 
 **Available for interviews:** Theo (CEO), Marcus (CTO)
 

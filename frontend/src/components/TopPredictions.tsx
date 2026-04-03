@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { PlayerPrediction } from '../types/predictions';
-import { capturePaperTrade, captureFirstPredictionViewed } from '../analytics';
+import { capturePaperTrade, captureFirstPrediction, captureFirstPredictionViewed } from '../analytics';
 import { useAuth } from '../context/AuthContext';
 import { getTrendIcon, getTrendClass } from '../utils/format';
 import './TopPredictions.css';
@@ -75,6 +75,12 @@ export function TopPredictions({ players, onPlayerClick }: TopPredictionsProps) 
       .then((result) => {
         setTradingStates(prev => ({ ...prev, [player.playerId]: 'success' }));
         if (user) {
+          const storageKey = `hasPlacedPrediction_${user.id}`;
+          const isFirst = !localStorage.getItem(storageKey);
+          if (isFirst) {
+            localStorage.setItem(storageKey, 'true');
+            captureFirstPrediction(user.id, player.playerId, player.playerName, player.confidence);
+          }
           capturePaperTrade(user.id, player.playerId, player.playerName, 10, odds, result.potentialPayout || 0);
         }
         setTimeout(() => setTradingStates(prev => ({ ...prev, [player.playerId]: 'idle' })), 2000);

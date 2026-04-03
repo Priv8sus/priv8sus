@@ -242,11 +242,14 @@ export function getBetHistory(limit: number = 50): PaperBet[] {
   return db.prepare('SELECT * FROM paper_bets WHERE status != \'open\' ORDER BY settled_at DESC LIMIT ?').all(limit) as PaperBet[];
 }
 
-/**
- * Get aggregate betting statistics.
- * @returns Object with total/won/lost/pending bets, win rate, P&L, and ROI
- */
-export function getBetStats(): {
+export interface BetStatsFilters {
+  teamAbbrev?: string;
+  statType?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface BetStats {
   total_bets: number;
   won_bets: number;
   lost_bets: number;
@@ -254,7 +257,27 @@ export function getBetStats(): {
   win_rate: number;
   total_profit_loss: number;
   roi: number;
-} {
+}
+
+export interface ROIBreakdown {
+  groupBy: string;
+  groups: {
+    key: string;
+    total_bets: number;
+    won_bets: number;
+    lost_bets: number;
+    win_rate: number;
+    total_profit_loss: number;
+    total_wagered: number;
+    roi: number;
+  }[];
+}
+
+/**
+ * Get aggregate betting statistics.
+ * @returns Object with total/won/lost/pending bets, win rate, P&L, and ROI
+ */
+export function getBetStats(): BetStats {
   const db = getDb();
   
   const stats = db.prepare(`
@@ -284,6 +307,170 @@ export function getBetStats(): {
     total_profit_loss: Math.round(totalProfitLoss * 100) / 100,
     roi: Math.round(roi * 100) / 100
   };
+}
+
+/**
+ * Get filtered betting statistics.
+ * @param filters - Filters for team, stat type, and date range
+ * @returns Filtered bet stats
+ */
+export function getFilteredBetStats(filters: BetStatsFilters): BetStats {
+  const db = getDb();
+  
+  let query = `
+    SELECT 
+      COUNT(*) as total_bets,
+      SUM(CASE WHEN status = 'won' THEN 1 ELSE 0 END) as won_bets,
+      SUM(CASE WHEN status = 'lost' THEN 1 ELSE 0 END) as lost_bets,
+      SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as pending_bets,
+      SUM(CASE WHEN status = 'won' THEN profit_loss ELSE 0 END) as total_wins,
+      SUM(CASE WHEN status = 'lost' THEN profit_loss ELSE 0 END) as total_losses,
+      SUM(stake) as total_wagered
+    FROM paper_bets
+    WHERE status != 'open'
+  `;
+  
+  const params: any[] = [];
+  
+  if (filters.teamAbbrev) {
+    query += ` AND team_abbrev = ?`;
+    params.push(filters.teamAbbrev);
+  }
+  
+  if (filters.statType) {
+    query += ` AND stat_type = ?`;
+    params.push(filters.statType);
+  }
+  
+  if (filters.startDate) {
+    query += ` AND DATE(settled_at) >= DATE(?)`;
+    params.push(filters.startDate);
+  }
+  
+  if (filters.endDate) {
+    query += ` AND DATE(settled_at) <= DATE(?)`;
+    params.push(filters.endDate);
+  }
+
+  const stats = db.prepare(query).get(...params) as any;
+
+  const winRate = stats.won_bets > 0 ? stats.won_bets / (stats.won_bets + stats.lost_bets) * 100 : 0;
+  const totalProfitLoss = (stats.total_wins || 0) + (stats.total_losses || 0);
+  const totalWagered = stats.total_wagered || 0;
+  const roi = totalWagered > 0 
+    ? (totalProfitLoss / totalWagered) * 100 
+    : 0;
+
+  return {
+    total_bets: stats.total_bets || 0,
+    won_bets: stats.won_bets || 0,
+    lost_bets: stats.lost_bets || 0,
+    pending_bets: stats.pending_bets || 0,
+    win_rate: Math.round(winRate * 100) / 100,
+    total_profit_loss: Math.round(totalProfitLoss * 100) / 100,
+    roi: Math.round(roi * 100) / 100
+  };
+}
+
+/**
+ * Get ROI breakdown by a grouping field.
+ * @param groupBy - Field to group by ('stat_type', 'team_abbrev', 'over_or_under', 'month')
+ * @returns ROI breakdown by groups
+ */
+export function getROIBreakdown(groupBy: 'stat_type' | 'team_abbrev' | 'over_or_under' | 'month'): ROIBreakdown {
+  const db = getDb();
+  
+  let groupExpr: string;
+  switch (groupBy) {
+    case 'stat_type':
+      groupExpr = 'stat_type';
+      break;
+    case 'team_abbrev':
+      groupExpr = 'team_abbrev';
+      break;
+    case 'over_or_under':
+      groupExpr = 'over_or_under';
+      break;
+    case 'month':
+      groupExpr = "strftime('%Y-%m', settled_at)";
+      break;
+    default:
+      groupExpr = 'stat_type';
+  }
+
+  const query = `
+    SELECT 
+      ${groupExpr} as \`key\`,
+      COUNT(*) as total_bets,
+      SUM(CASE WHEN status = 'won' THEN 1 ELSE 0 END) as won_bets,
+      SUM(CASE WHEN status = 'lost' THEN 1 ELSE 0 END) as lost_bets,
+      SUM(CASE WHEN status = 'won' THEN profit_loss ELSE 0 END) as total_wins,
+      SUM(CASE WHEN status = 'lost' THEN profit_loss ELSE 0 END) as total_losses,
+      SUM(stake) as total_wagered
+    FROM paper_bets
+    WHERE status != 'open'
+    GROUP BY ${groupExpr}
+    ORDER BY total_bets DESC
+  `;
+
+  const rows = db.prepare(query).all() as any[];
+
+  const groups = rows.map(row => {
+    const winRate = row.won_bets > 0 ? row.won_bets / (row.won_bets + row.lost_bets) * 100 : 0;
+    const totalProfitLoss = (row.total_wins || 0) + (row.total_losses || 0);
+    const roi = row.total_wagered > 0 ? (totalProfitLoss / row.total_wagered) * 100 : 0;
+
+    return {
+      key: row.key || 'unknown',
+      total_bets: row.total_bets || 0,
+      won_bets: row.won_bets || 0,
+      lost_bets: row.lost_bets || 0,
+      win_rate: Math.round(winRate * 100) / 100,
+      total_profit_loss: Math.round(totalProfitLoss * 100) / 100,
+      total_wagered: Math.round((row.total_wagered || 0) * 100) / 100,
+      roi: Math.round(roi * 100) / 100
+    };
+  });
+
+  return { groupBy, groups };
+}
+
+/**
+ * Get filtered bet history.
+ * @param limit - Maximum number of bets
+ * @param filters - Filters for team, stat type, date range
+ * @returns Filtered bet history
+ */
+export function getFilteredBetHistory(limit: number, filters: BetStatsFilters): PaperBet[] {
+  const db = getDb();
+  
+  let query = `SELECT * FROM paper_bets WHERE status != 'open'`;
+  const params: any[] = [];
+  
+  if (filters.teamAbbrev) {
+    query += ` AND team_abbrev = ?`;
+    params.push(filters.teamAbbrev);
+  }
+  
+  if (filters.statType) {
+    query += ` AND stat_type = ?`;
+    params.push(filters.statType);
+  }
+  
+  if (filters.startDate) {
+    query += ` AND DATE(settled_at) >= DATE(?)`;
+    params.push(filters.startDate);
+  }
+  
+  if (filters.endDate) {
+    query += ` AND DATE(settled_at) <= DATE(?)`;
+    params.push(filters.endDate);
+  }
+  
+  query += ` ORDER BY settled_at DESC LIMIT ?`;
+  params.push(limit);
+
+  return db.prepare(query).all(...params) as PaperBet[];
 }
 
 /**

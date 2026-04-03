@@ -1,18 +1,23 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense, useRef } from 'react';
+import type { ComponentType } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import HistoricalView from './components/HistoricalView';
 import AccuracyMetrics from './components/AccuracyMetrics';
 import { PlayerDetailPanel } from './components/PlayerDetailPanel';
 import { TopPredictions } from './components/TopPredictions';
 import { LandingPage } from './components/LandingPage';
 import { UserProfile } from './components/UserProfile';
-import { TourGuide } from './components/TourGuide';
 import { useTourComplete } from './hooks/useTourComplete';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { useWelcomeComplete } from './hooks/useWelcomeComplete';
 import { capturePageView } from './analytics';
 import type { PredictionsResponse, PlayerPrediction } from './types/predictions';
 import './App.css';
+
+type LazyComponent = ComponentType<Record<string, unknown>>;
+
+const HistoricalView: LazyComponent = lazy(() => import('./components/HistoricalView').then(m => ({ default: m.default as unknown as LazyComponent })));
+const ROIDashboard: LazyComponent = lazy(() => import('./components/ROIDashboard').then(m => ({ default: m.default as unknown as LazyComponent })));
+const TourGuide: LazyComponent = lazy(() => import('./components/TourGuide').then(m => ({ default: m.TourGuide as unknown as LazyComponent })));
 
 interface DashboardProps {
   showProfile: () => void;
@@ -24,11 +29,12 @@ function Dashboard({ showProfile }: DashboardProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [activeTab, setActiveTab] = useState<'today' | 'history'>('today');
+  const [activeTab, setActiveTab] = useState<'today' | 'history' | 'roi'>('today');
   const [selectedPlayer, setSelectedPlayer] = useState<PlayerPrediction | null>(null);
   const [selectedGame, setSelectedGame] = useState<number | null>(null);
   const { completed: tourCompleted, markComplete: markTourComplete } = useTourComplete();
   const [showTour, setShowTour] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const isTourCompleted = tourCompleted || user?.tourCompleted;
 
@@ -42,14 +48,23 @@ function Dashboard({ showProfile }: DashboardProps) {
   }, [activeTab]);
 
   const fetchDashboardData = useCallback(async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/predictions?date=${selectedDate}`);
+      const res = await fetch(`/api/predictions?date=${selectedDate}`, {
+        signal: abortControllerRef.current.signal,
+      });
       if (!res.ok) throw new Error('Failed to fetch predictions');
       const json = await res.json();
       setData(json);
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Failed to fetch predictions');
     }
     setLoading(false);
@@ -57,6 +72,11 @@ function Dashboard({ showProfile }: DashboardProps) {
 
   useEffect(() => {
     fetchDashboardData();
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [fetchDashboardData]);
 
   const formatDate = (dateStr: string) => {
@@ -118,6 +138,12 @@ function Dashboard({ showProfile }: DashboardProps) {
               onClick={() => setActiveTab('history')}
             >
               History
+            </button>
+            <button 
+              className={activeTab === 'roi' ? 'active' : ''} 
+              onClick={() => setActiveTab('roi')}
+            >
+              ROI Dashboard
             </button>
           </div>
           <span className="user-email">{user?.email}</span>
@@ -197,9 +223,17 @@ function Dashboard({ showProfile }: DashboardProps) {
             </aside>
           </div>
         </main>
+      ) : activeTab === 'history' ? (
+        <main className="dash-main">
+          <Suspense fallback={<div className="dash-main loading">Loading history...</div>}>
+            <HistoricalView />
+          </Suspense>
+        </main>
       ) : (
         <main className="dash-main">
-          <HistoricalView />
+          <Suspense fallback={<div className="dash-main loading">Loading ROI dashboard...</div>}>
+            <ROIDashboard />
+          </Suspense>
         </main>
       )}
 
@@ -209,10 +243,12 @@ function Dashboard({ showProfile }: DashboardProps) {
       />
 
       {showTour && (
-        <TourGuide onComplete={() => {
-          setShowTour(false);
-          handleTourComplete();
-        }} />
+        <Suspense fallback={null}>
+          <TourGuide onComplete={() => {
+            setShowTour(false);
+            handleTourComplete();
+          }} />
+        </Suspense>
       )}
     </div>
   );

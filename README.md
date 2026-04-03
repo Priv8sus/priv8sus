@@ -1,6 +1,44 @@
-# Priv8sus - Sports Prediction App
+# Priv8sus - AI-Powered NBA Predictions & Paper Trading
 
-AI-powered NBA player stats predictions with paper trading simulation.
+**Priv8sus** predicts NBA player performance and lets you test your betting strategies risk-free with paper trading. Built for sports enthusiasts who want data-driven insights without the financial risk.
+
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/Priv8sus/priv8sus/actions)
+[![NBA Season](https://img.shields.io/badge/NBA-2024--25-blue)](https://www.nba.com)
+[![Live App](https://img.shields.io/badge/live-soon-orange)]()
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  PRIV8SUS DASHBOARD                                             │
+├─────────────────────────────────────────────────────────────────┤
+│  🏀 NBA Predictions          💰 Paper Trading                  │
+│  ─────────────────           ─────────────────                  │
+│                                                                 │
+│  Player          Points  Rebounds  Assists                      │
+│  ──────────────────────────────────────────                     │
+│  LeBron James     24.2     7.8      8.1     [View Details]      │
+│  Luka Doncic      28.9     8.3      9.5     [View Details]      │
+│  Jayson Tatum      --      --        --      Loading...         │
+│                                                                 │
+│  ────────────────────────────────────────────────────────────   │
+│  📊 Bankroll: $10,000.00   |   Today's P&L: +$245.50           │
+│  [Place Bet]  [View History]  [Reset Portfolio]                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Quick Start (3 Steps)
+
+```bash
+# 1. Clone & install
+git clone https://github.com/Priv8sus/priv8sus.git && cd priv8sus && npm install
+
+# 2. Configure environment
+cp .env.example .env  # Add your BALLDONTLIE_API_KEY (free at balldontlie.io)
+
+# 3. Start services
+docker-compose up     # Starts API (localhost:3000) + Frontend (localhost:80)
+```
+
+> **Live app coming soon** — [Subscribe for updates](#)
 
 ## Services
 - **api** - Backend API (Node.js/TypeScript/Express)
